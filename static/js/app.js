@@ -361,17 +361,20 @@ async function renderWeek() {
         }, day.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })));
     }
 
-    // Build time column + grid cells (rows for 8..21 inclusive => 14 rows).
+    // Build time column + background hour-cells. Each visible hour
+    // spans 4 quarter-rows. Rows: 1 = header; 2..57 = 56 quarters.
     const HOUR_START = 8, HOUR_END = 21;
+    const QUARTERS = 4;
     for (let h = HOUR_START; h <= HOUR_END; h++) {
-        const row = h - HOUR_START + 2; // +1 for header, +1 because grid is 1-indexed
-        grid.append(el("div", { class: "week-grid-time", style: `grid-row: ${row};` },
+        const startRow = 2 + (h - HOUR_START) * QUARTERS;
+        grid.append(el("div", { class: "week-grid-time",
+            style: `grid-row: ${startRow} / span ${QUARTERS};` },
             `${String(h).padStart(2, "0")}:00`));
         for (let i = 0; i < 7; i++) {
             const isToday = isoDate(dayDates[i]) === today;
             grid.append(el("div", {
                 class: "week-grid-cell" + (isToday ? " is-today" : ""),
-                style: `grid-row: ${row}; grid-column: ${i + 2};`,
+                style: `grid-row: ${startRow} / span ${QUARTERS}; grid-column: ${i + 2};`,
                 dataset: { day: isoDate(dayDates[i]), hour: h },
             }));
         }
@@ -385,17 +388,16 @@ async function renderWeek() {
         toast(`Failed to load calendar: ${e.message}`, "error");
         return;
     }
-    lessons.forEach((l) => placeLessonInWeek(grid, l));
+    lessons.forEach((l) => placeLessonInWeek(grid, l, dayDates));
 
-    // Now-indicator: a red line at the current time, but only if the
-    // user is looking at the current week.
+    // Now-indicator: red line across the day columns at the current
+    // local time, when the displayed week contains today.
     const now = new Date();
     if (now >= start && now < addDays(end, 1)) {
-        const HOUR_START = 8;
-        const ROW_HEIGHT = 50;
-        const HEADER_ROW = ROW_HEIGHT; // one header row, same height
+        const ROW_HEIGHT = 50;       // one hour, visually
+        const HEADER_ROW = ROW_HEIGHT;
         const totalMinutes = (now.getHours() - HOUR_START) * 60 + now.getMinutes();
-        if (totalMinutes >= 0 && totalMinutes <= (21 - HOUR_START + 1) * 60) {
+        if (totalMinutes >= 0 && totalMinutes <= (HOUR_END - HOUR_START + 1) * 60) {
             const top = HEADER_ROW + (totalMinutes / 60) * ROW_HEIGHT;
             grid.append(el("div", {
                 class: "week-now-indicator",
@@ -406,22 +408,41 @@ async function renderWeek() {
     }
 }
 
-function placeLessonInWeek(grid, lesson) {
-    const dt = new Date((lesson.start_datetime || "").replace(" ", "T"));
-    if (isNaN(dt.getTime())) return;
-    const dayIso = isoDate(dt);
-    let hour = dt.getHours();
-    if (hour < 8) hour = 8;
-    if (hour > 21) hour = 21;
-    const cell = grid.querySelector(`.week-grid-cell[data-day="${dayIso}"][data-hour="${hour}"]`);
-    if (!cell) return;
-    const pill = el("button", { type: "button", class: "lesson-pill", title: `Lesson #${lesson.lesson_id}` });
+function placeLessonInWeek(grid, lesson, dayDates) {
+    const HOUR_START = 8;
+    const QUARTERS_PER_HOUR = 4;
+    const TOTAL_QUARTERS = 14 * QUARTERS_PER_HOUR; // 8am..10pm
+
+    const startDt = new Date((lesson.start_datetime || "").replace(" ", "T"));
+    const endDt = new Date((lesson.end_datetime || "").replace(" ", "T"));
+    if (isNaN(startDt.getTime())) return;
+
+    const dayIso = isoDate(startDt);
+    const dayIndex = dayDates.findIndex((d) => isoDate(d) === dayIso);
+    if (dayIndex < 0) return;
+
+    // Snap to nearest 15 minutes. End rounds up so a 9:00-10:00 lesson
+    // shows a full hour, not 3 quarters.
+    const startMin = (startDt.getHours() - HOUR_START) * 60 + startDt.getMinutes();
+    const endMin = isNaN(endDt.getTime())
+        ? startMin + 60
+        : (endDt.getHours() - HOUR_START) * 60 + endDt.getMinutes();
+    let startQ = Math.max(0, Math.round(startMin / 15));
+    let endQ = Math.min(TOTAL_QUARTERS, Math.max(startQ + 1, Math.ceil(endMin / 15)));
+
+    const pill = el("button", {
+        type: "button",
+        class: "lesson-pill",
+        title: `Lesson #${lesson.lesson_id} · ${fmtTime(lesson.start_datetime)}–${fmtTime(lesson.end_datetime)}`,
+        style: `grid-row: ${2 + startQ} / ${2 + endQ}; grid-column: ${dayIndex + 2};`,
+    });
     pill.append(
-        el("span", { class: "lesson-pill-time" }, `${fmtTime(lesson.start_datetime)}–${fmtTime(lesson.end_datetime)}`),
+        el("span", { class: "lesson-pill-time" },
+            `${fmtTime(lesson.start_datetime)}–${fmtTime(lesson.end_datetime)}`),
         el("span", { class: "lesson-pill-name" }, lesson.course_name),
     );
     pill.addEventListener("click", () => openLessonDialog(lesson));
-    cell.append(pill);
+    grid.append(pill);
 }
 
 async function renderMonth() {
