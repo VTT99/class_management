@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     api_bearer_token: str = Field(default="", alias="API_BEARER_TOKEN")
     root_path: str = Field(default="", alias="ROOT_PATH")
+    serve_frontend: bool = Field(default=True, alias="SERVE_FRONTEND")
+    allowed_origins: str = Field(
+        default="http://127.0.0.1:8000,http://localhost:8000",
+        alias="ALLOWED_ORIGINS",
+    )
+
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
     @property
     def duckdb_path(self) -> Path:

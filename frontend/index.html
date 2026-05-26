@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tutorial Center Management</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Tutorial Center</h1>
+            <span id="health-badge" class="badge badge-muted" title="API health">checking...</span>
+        </header>
+
+        <nav role="tablist" aria-label="Sections">
+            <button type="button" role="tab" data-page="studentData" aria-selected="true">Student Data</button>
+            <button type="button" role="tab" data-page="addStudent" aria-selected="false">Add Student</button>
+            <button type="button" role="tab" data-page="registerLessons" aria-selected="false">Register</button>
+            <button type="button" role="tab" data-page="markAttendance" aria-selected="false">Attendance</button>
+            <button type="button" role="tab" data-page="generateCalendar" aria-selected="false">Calendar</button>
+        </nav>
+
+        <!-- Student Data -->
+        <section id="studentData" class="page active" role="tabpanel">
+            <h2>Student Data</h2>
+            <div class="form-row">
+                <input type="number" id="studentIdInput" min="1" placeholder="Student ID" required>
+                <button type="button" id="fetchStudentBtn">Get Data</button>
+                <a id="csvExportLink" class="link hidden" href="#" download>Export CSV</a>
+            </div>
+            <div id="studentInfo" class="result-block"></div>
+            <div id="courseTabs" class="course-tabs"></div>
+            <div id="lessonDetails"></div>
+        </section>
+
+        <!-- Add Student -->
+        <section id="addStudent" class="page" role="tabpanel" hidden>
+            <h2>Add New Student</h2>
+            <form id="addStudentForm">
+                <label>Name<input type="text" name="name" required maxlength="200"></label>
+                <label>Parent contact<input type="text" name="parent_contact" required maxlength="200"></label>
+                <label>Gender
+                    <select name="gender" required>
+                        <option value="F">Female</option>
+                        <option value="M">Male</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </label>
+                <label>Payment method<input type="text" name="payment_method" required></label>
+                <label>Referee (optional)<input type="text" name="referee"></label>
+                <button type="submit">Add Student</button>
+            </form>
+        </section>
+
+        <!-- Register Lessons -->
+        <section id="registerLessons" class="page" role="tabpanel" hidden>
+            <h2>Register for Lessons</h2>
+            <label>Search course
+                <input type="text" id="courseSearchInput" placeholder="Start typing a course name..." autocomplete="off">
+            </label>
+            <div id="courseResults" class="result-block"></div>
+
+            <div id="registrationForm" hidden>
+                <h3>Register for <span id="selectedCourseName"></span></h3>
+                <input type="hidden" id="selectedCourseId">
+                <label>Student ID<input type="number" id="registrationStudentId" min="1" required></label>
+                <label>Day of week
+                    <select id="dayOfWeek" required>
+                        <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
+                        <option>Thursday</option><option>Friday</option>
+                        <option>Saturday</option><option>Sunday</option>
+                    </select>
+                </label>
+                <label>Start time<select id="startTime" required></select></label>
+                <label>Number of lessons<input type="number" id="numberOfLessons" min="1" max="200" value="10" required></label>
+                <label>First lesson date<input type="date" id="firstLessonDate"></label>
+                <button type="button" id="registerBtn">Register</button>
+            </div>
+        </section>
+
+        <!-- Mark Attendance -->
+        <section id="markAttendance" class="page" role="tabpanel" hidden>
+            <h2>Mark Attendance</h2>
+            <div class="form-row">
+                <input type="number" id="attendanceLessonId" min="1" placeholder="Lesson ID" required>
+                <button type="button" id="fetchParticipantsBtn">Get Participants</button>
+            </div>
+            <form id="attendanceForm" hidden>
+                <div id="participantsList"></div>
+                <button type="submit">Mark Selected as Attended</button>
+            </form>
+            <div id="attendanceResult" class="result-block"></div>
+        </section>
+
+        <!-- Calendar -->
+        <section id="generateCalendar" class="page" role="tabpanel" hidden>
+            <h2>Calendar Events</h2>
+            <label>Months ahead<input type="number" id="monthsAhead" min="1" max="24" value="1"></label>
+            <div class="form-row">
+                <button type="button" id="syncCalendarBtn">Sync (recommended)</button>
+                <button type="button" id="regenerateCalendarBtn" class="btn-secondary">Wipe &amp; recreate</button>
+            </div>
+            <div id="calendarResult" class="result-block"></div>
+        </section>
+    </div>
+
+    <div id="toast-stack" aria-live="polite"></div>
+
+    <script src="config.js"></script>
+    <script src="static/js/app.js" defer></script>
+</body>
+</html>

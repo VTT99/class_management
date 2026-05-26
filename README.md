@@ -10,14 +10,15 @@ Repo path: ~/class_management   (local)
            /opt/class_management (server)
 ```
 
-Three supported environments — the code is identical, only `.env` and the
+Four supported environments — the code is identical, only `.env` and the
 process manager differ:
 
-| Where                       | `ROOT_PATH`         | Runner             | URL                                       |
-| --------------------------- | ------------------- | ------------------ | ----------------------------------------- |
-| Laptop dev                  | empty (default)     | `uvicorn --reload` | `http://127.0.0.1:8000/`                  |
-| VPS (your own Ubuntu box)   | `/class_management` | systemd + Caddy    | `https://test.com/class_management/`      |
-| Shared hosting (cPanel)     | `/class_management` | Phusion Passenger  | `https://your-domain/class_management/`   |
+| Where                          | Runner             | URL                                       | Notes |
+| ------------------------------ | ------------------ | ----------------------------------------- | --- |
+| Laptop dev                     | `uvicorn --reload` | `http://127.0.0.1:8000/`                  | `ROOT_PATH=` empty |
+| VPS (your own Ubuntu box)      | systemd + Caddy    | `https://test.com/class_management/`      | `ROOT_PATH=/class_management` |
+| Shared hosting (cPanel)        | Phusion Passenger  | `https://your-domain/class_management/`   | `ROOT_PATH=/class_management` |
+| Static-only host + backend elsewhere | Apache + remote uvicorn | `https://your-domain/class_management/`   | Frontend in `public_html`, backend on a VPS / PaaS |
 
 ---
 
@@ -176,19 +177,52 @@ Passenger manages the process.
 
 ---
 
+## Running with a split frontend (static-only Apache + backend elsewhere)
+
+For hosts that only serve static files from `public_html` (no Setup
+Python App, no Passenger). Full walkthrough in
+[`docs/DEPLOY_SPLIT.md`](docs/DEPLOY_SPLIT.md) — TL;DR:
+
+1. **Run the backend** anywhere it can — your VPS via
+   [`docs/DEPLOY.md`](docs/DEPLOY.md), Fly.io, Render, etc. In its `.env`:
+   ```
+   SERVE_FRONTEND=false
+   ALLOWED_ORIGINS=https://your-domain.example
+   API_BEARER_TOKEN=<long-random-string>
+   ```
+2. **Build the static bundle** on your laptop:
+   ```bash
+   python -m scripts.build_frontend
+   ```
+   This regenerates `frontend/`.
+3. **Upload `frontend/*`** into `~/public_html/class_management/` on the
+   shared host.
+4. **Edit `config.js`** on the host:
+   ```js
+   window.API_BASE = "https://api.your-domain.example";
+   window.API_TOKEN = "<same string as API_BEARER_TOKEN above>";
+   ```
+5. Visit `https://your-domain.example/class_management/`.
+
+The bearer token is mandatory here — without it, the API URL in the JS
+makes every write endpoint publicly callable.
+
+---
+
 ## Repo layout
 
 ```
 app/                 FastAPI app (routers, models, db helpers, services)
-static/              JS + CSS served at /static/
-templates/           HTML served at /
-scripts/             ETL: download_sheet_to_db.py, seed_test_data.py
+static/              JS + CSS source (served at /static/ in integrated mode)
+templates/           HTML source (served at / in integrated mode)
+frontend/            Generated static bundle for split-deploy (upload to public_html)
+scripts/             ETL + build_frontend.py
 tests/               pytest suite
 data/                DuckDB file (gitignored)
 secrets/             Service-account JSON (gitignored)
 deploy/              systemd unit + Caddyfile for VPS deploy
 passenger_wsgi.py    Entry point for cPanel "Setup Python App" (Passenger)
-docs/                USAGE.md (API), DEPLOY.md (VPS), DEPLOY_CPANEL.md (shared hosting)
+docs/                USAGE, DEPLOY (VPS), DEPLOY_CPANEL, DEPLOY_SPLIT
 ```
 
 ## Reference
@@ -199,3 +233,5 @@ docs/                USAGE.md (API), DEPLOY.md (VPS), DEPLOY_CPANEL.md (shared h
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 - **Shared-hosting deployment (cPanel + Passenger):**
   [`docs/DEPLOY_CPANEL.md`](docs/DEPLOY_CPANEL.md).
+- **Split deployment (static frontend on Apache + backend elsewhere):**
+  [`docs/DEPLOY_SPLIT.md`](docs/DEPLOY_SPLIT.md).

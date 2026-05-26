@@ -26,8 +26,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.root_path else
-        ["http://127.0.0.1:8000", "http://localhost:8000"],
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,18 +38,17 @@ app.include_router(registration.router)
 app.include_router(attendance.router)
 app.include_router(calendar.router)
 
-app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "static")), name="static")
+if settings.serve_frontend:
+    app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "static")), name="static")
 
+    @lru_cache(maxsize=1)
+    def _rendered_index() -> str:
+        html = (REPO_ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+        return html.replace("{{ root_path }}", settings.root_path)
 
-@lru_cache(maxsize=1)
-def _rendered_index() -> str:
-    html = (REPO_ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-    return html.replace("{{ root_path }}", settings.root_path)
-
-
-@app.get("/", include_in_schema=False, response_class=HTMLResponse)
-def index() -> HTMLResponse:
-    return HTMLResponse(_rendered_index())
+    @app.get("/", include_in_schema=False, response_class=HTMLResponse)
+    def index() -> HTMLResponse:
+        return HTMLResponse(_rendered_index())
 
 
 @app.get("/health", tags=["meta"])
