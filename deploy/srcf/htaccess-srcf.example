@@ -1,0 +1,27 @@
+# SRCF .htaccess: reverse-proxy every request under /class_management/ to
+# the uvicorn process listening on a Unix socket.
+#
+# Place a copy of this file at:
+#     ~/public_html/class_management/.htaccess
+# and edit <YOUR-CRSID> below to your SRCF username.
+#
+# This uses the exact directives SRCF documents at
+# https://docs.srcf.net/reference/web-hosting/web-applications/.
+
+RequestHeader set Host expr=%{HTTP_HOST}
+RequestHeader set X-Forwarded-For expr=%{REMOTE_ADDR}
+RequestHeader set X-Forwarded-Proto expr=%{REQUEST_SCHEME}
+RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
+
+# Stop Apache from trying to list this dir as a directory index — the
+# app's own "/" handler renders the homepage.
+DirectoryIndex disabled
+
+# Hand every request off to the FastAPI app via its Unix socket.
+# The app sees clean paths (e.g. "/health", "/student_data") and
+# generates URLs with the /class_management prefix because ROOT_PATH is
+# set in .env. SERVE_FRONTEND=true on the backend so it also serves the
+# bundled HTML/JS/CSS — no files need live in public_html besides this
+# .htaccess.
+RewriteEngine On
+RewriteRule ^(.*)$ unix:/home/<YOUR-CRSID>/class_management/web.sock|http://localhost/$1 [P,NE,L,QSA]

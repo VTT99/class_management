@@ -10,17 +10,18 @@ Repo path: ~/class_management   (local)
            /opt/class_management (server)
 ```
 
-Six supported environments — the code is identical, only `.env` and the
+Seven supported environments — the code is identical, only `.env` and the
 process manager differ:
 
-| Where                                              | Runner                  | URL                                       | Notes |
-| -------------------------------------------------- | ----------------------- | ----------------------------------------- | --- |
-| Laptop dev                                         | `uvicorn --reload`      | `http://127.0.0.1:8000/`                  | `ROOT_PATH=` empty |
-| VPS (your own Ubuntu box)                          | systemd + Caddy         | `https://test.com/class_management/`      | `ROOT_PATH=/class_management` |
-| Raspberry Pi at home                               | systemd + (optional) Caddy | `http://<ip>:8000/class_management/` or `https://you.duckdns.org/class_management/` | `ROOT_PATH=/class_management` |
-| Shared hosting (cPanel)                            | Phusion Passenger       | `https://your-domain/class_management/`   | `ROOT_PATH=/class_management` |
-| Shared hosting (SSH, no cPanel, has `mod_proxy`)   | Apache + nohup uvicorn  | `https://your-domain/class_management/`   | Same host, .htaccess proxies `/api/*` to localhost |
-| Static-only host + backend elsewhere               | Apache + remote uvicorn | `https://your-domain/class_management/`   | Frontend in `public_html`, backend on a VPS / PaaS |
+| Where                                              | Runner                       | URL                                       | Notes |
+| -------------------------------------------------- | ---------------------------- | ----------------------------------------- | --- |
+| Laptop dev                                         | `uvicorn --reload`           | `http://127.0.0.1:8000/`                  | `ROOT_PATH=` empty |
+| VPS (your own Ubuntu box)                          | systemd + Caddy              | `https://test.com/class_management/`      | `ROOT_PATH=/class_management` |
+| Raspberry Pi at home                               | systemd + (optional) Caddy   | `http://<ip>:8000/class_management/` or `https://you.duckdns.org/class_management/` | `ROOT_PATH=/class_management` |
+| Shared hosting (cPanel)                            | Phusion Passenger            | `https://your-domain/class_management/`   | `ROOT_PATH=/class_management` |
+| SRCF (Cambridge SRCF, Unix socket + systemctl --user) | systemd --user + .htaccess to unix socket | `https://<crsid>.user.srcf.net/class_management/` | `ROOT_PATH=/class_management` |
+| Shared hosting (SSH, no cPanel, has `mod_proxy`)   | Apache + nohup uvicorn       | `https://your-domain/class_management/`   | Same host, .htaccess proxies `/api/*` to localhost |
+| Static-only host + backend elsewhere               | Apache + remote uvicorn      | `https://your-domain/class_management/`   | Frontend in `public_html`, backend on a VPS / PaaS |
 
 ---
 
@@ -166,6 +167,39 @@ the sweet spot if buying fresh.
 
 ---
 
+## Running on the SRCF (Cambridge Student-Run Computing Facility)
+
+The SRCF has its own conventions — Unix sockets, not TCP ports, and
+`systemctl --user` instead of nohup. Full walkthrough in
+[`docs/DEPLOY_SRCF.md`](docs/DEPLOY_SRCF.md) — TL;DR:
+
+1. SSH in (`<crsid>@<crsid>.user.srcf.net`), clone the repo to
+   `~/class_management/`, create venv, install deps.
+2. In `.env` set `SERVE_FRONTEND=true`, `ROOT_PATH=/class_management`,
+   `API_BEARER_TOKEN=<long-random-string>`.
+3. Install the systemd user service:
+   ```bash
+   mkdir -p ~/.config/systemd/user
+   cp ~/class_management/deploy/srcf/class-management.service ~/.config/systemd/user/
+   loginctl enable-linger $USER
+   systemctl --user enable --now class-management
+   ```
+   This launches uvicorn on `~/class_management/web.sock` and keeps it
+   running after logout.
+4. Install the .htaccess:
+   ```bash
+   mkdir -p ~/public_html/class_management
+   cp ~/class_management/deploy/srcf/htaccess-srcf.example \
+      ~/public_html/class_management/.htaccess
+   # edit <YOUR-CRSID> in the file to your actual CRSid
+   ```
+5. Visit `https://<crsid>.user.srcf.net/class_management/`.
+
+Day-to-day: `systemctl --user {status, restart, stop} class-management`
+and `journalctl --user -u class-management -f` for logs.
+
+---
+
 ## Running on shared hosting (cPanel)
 
 For cPanel-based shared hosts (Namecheap, Bluehost, A2, DreamHost, school
@@ -302,6 +336,8 @@ docs/                USAGE, DEPLOY (VPS), DEPLOY_CPANEL, DEPLOY_SAME_HOST, DEPLO
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 - **Raspberry Pi self-host (home network, port-forward, DuckDNS):**
   [`docs/DEPLOY_PI.md`](docs/DEPLOY_PI.md).
+- **SRCF (Cambridge Student-Run Computing Facility):**
+  [`docs/DEPLOY_SRCF.md`](docs/DEPLOY_SRCF.md).
 - **Shared-hosting deployment (cPanel + Passenger):**
   [`docs/DEPLOY_CPANEL.md`](docs/DEPLOY_CPANEL.md).
 - **Same-host deployment (SSH shared host, Apache `mod_proxy` + nohup uvicorn):**

@@ -1,0 +1,12 @@
+[Unit]
+Description=Tutorial Center FastAPI app
+ConditionHost=sinkhole
+
+[Install]
+WantedBy=default.target
+
+[Service]
+WorkingDirectory=/home/%u/class_management
+ExecStart=/home/%u/class_management/deploy/srcf/run.sh
+Restart=always
+RestartSec=3
