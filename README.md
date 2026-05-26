@@ -10,13 +10,14 @@ Repo path: ~/class_management   (local)
            /opt/class_management (server)
 ```
 
-Five supported environments — the code is identical, only `.env` and the
+Six supported environments — the code is identical, only `.env` and the
 process manager differ:
 
 | Where                                              | Runner                  | URL                                       | Notes |
 | -------------------------------------------------- | ----------------------- | ----------------------------------------- | --- |
 | Laptop dev                                         | `uvicorn --reload`      | `http://127.0.0.1:8000/`                  | `ROOT_PATH=` empty |
 | VPS (your own Ubuntu box)                          | systemd + Caddy         | `https://test.com/class_management/`      | `ROOT_PATH=/class_management` |
+| Raspberry Pi at home                               | systemd + (optional) Caddy | `http://<ip>:8000/class_management/` or `https://you.duckdns.org/class_management/` | `ROOT_PATH=/class_management` |
 | Shared hosting (cPanel)                            | Phusion Passenger       | `https://your-domain/class_management/`   | `ROOT_PATH=/class_management` |
 | Shared hosting (SSH, no cPanel, has `mod_proxy`)   | Apache + nohup uvicorn  | `https://your-domain/class_management/`   | Same host, .htaccess proxies `/api/*` to localhost |
 | Static-only host + backend elsewhere               | Apache + remote uvicorn | `https://your-domain/class_management/`   | Frontend in `public_html`, backend on a VPS / PaaS |
@@ -136,6 +137,32 @@ sudo -u class-management git -C /opt/class_management pull
 sudo -u class-management /opt/class_management/.venv/bin/pip install -r /opt/class_management/requirements.txt
 sudo systemctl restart class-management
 ```
+
+---
+
+## Running on a Raspberry Pi at home
+
+For self-hosting on hardware you own. Full walkthrough in
+[`docs/DEPLOY_PI.md`](docs/DEPLOY_PI.md) — TL;DR:
+
+1. Flash **Raspberry Pi OS Lite (64-bit, Bookworm)** to an SD card.
+   Plug Ethernet, SSH in.
+2. Give the Pi a static LAN IP (DHCP reservation in your router, or
+   edit `/etc/dhcpcd.conf`).
+3. Install the app the same way as the VPS deploy ([`DEPLOY.md`](docs/DEPLOY.md)).
+4. Forward port 8000 (or 80) on your router to the Pi's LAN IP.
+5. Set up free dynamic DNS (DuckDNS) so the URL survives ISP IP changes:
+   `http://yourname.duckdns.org:8000/class_management/`.
+6. (Optional) Install Caddy on the Pi for free HTTPS once you have the
+   DuckDNS hostname.
+
+**Reality checks:** confirm you're not behind ISP CGNAT (`curl ifconfig.me`
+on the Pi must equal the WAN IP shown in your router) and that your ISP
+doesn't block inbound ports. If either fails, the doc points you at
+Cloudflare Tunnel as a free fallback that sidesteps both problems.
+
+Pi 3 (which you already have) is fine for this; Pi 4 with 2 GB RAM is
+the sweet spot if buying fresh.
 
 ---
 
@@ -273,6 +300,8 @@ docs/                USAGE, DEPLOY (VPS), DEPLOY_CPANEL, DEPLOY_SAME_HOST, DEPLO
   [`docs/USAGE.md`](docs/USAGE.md).
 - **VPS deployment (Ubuntu + Caddy + systemd):**
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
+- **Raspberry Pi self-host (home network, port-forward, DuckDNS):**
+  [`docs/DEPLOY_PI.md`](docs/DEPLOY_PI.md).
 - **Shared-hosting deployment (cPanel + Passenger):**
   [`docs/DEPLOY_CPANEL.md`](docs/DEPLOY_CPANEL.md).
 - **Same-host deployment (SSH shared host, Apache `mod_proxy` + nohup uvicorn):**
