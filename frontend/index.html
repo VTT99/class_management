@@ -25,10 +25,10 @@
         <section id="studentData" class="page active" role="tabpanel">
             <h2>Student Data</h2>
             <div class="form-row">
-                <input type="number" id="studentIdInput" min="1" placeholder="Student ID" required>
-                <button type="button" id="fetchStudentBtn">Get Data</button>
+                <input type="text" id="studentSearchInput" placeholder="Search by ID or name..." autocomplete="off" required>
                 <a id="csvExportLink" class="link hidden" href="#" download>Export CSV</a>
             </div>
+            <div id="studentSearchResults" class="result-block"></div>
             <div id="studentInfo" class="result-block"></div>
             <div id="courseTabs" class="course-tabs"></div>
             <div id="lessonDetails"></div>

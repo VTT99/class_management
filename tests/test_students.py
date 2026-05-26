@@ -38,3 +38,29 @@ def test_csv_export(client):
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     assert "lesson_id" in r.text
+
+
+def test_search_students_by_name(client):
+    r = client.get("/search_students", params={"q": "ali"})
+    assert r.status_code == 200
+    data = r.json()
+    assert any(s["name"] == "Alice" for s in data)
+
+
+def test_search_students_by_id(client):
+    r = client.get("/search_students", params={"q": "1"})
+    assert r.status_code == 200
+    data = r.json()
+    # The exact-ID match should come first.
+    assert data[0]["student_id"] == 1
+
+
+def test_search_students_no_match(client):
+    r = client.get("/search_students", params={"q": "zzzzz"})
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_search_students_empty_query_rejected(client):
+    r = client.get("/search_students", params={"q": ""})
+    assert r.status_code == 422

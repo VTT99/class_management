@@ -114,18 +114,17 @@ async function refreshHealth() {
 let currentLessons = {};
 let currentSummary = {};
 
-async function fetchStudentData() {
-    const id = parseInt($("studentIdInput").value, 10);
+async function fetchStudentData(studentId) {
+    const id = parseInt(studentId, 10);
     const info = $("studentInfo");
     const tabs = $("courseTabs");
     const details = $("lessonDetails");
     const csvLink = $("csvExportLink");
     info.innerHTML = ""; tabs.innerHTML = ""; details.innerHTML = ""; csvLink.classList.add("hidden");
-    if (!id || id <= 0) { $("studentIdInput").classList.add("invalid"); return toast("Enter a student ID", "warn"); }
-    $("studentIdInput").classList.remove("invalid");
+    if (!id || id <= 0) { return toast("Enter a student ID or name", "warn"); }
 
     try {
-        const data = await withLoading($("fetchStudentBtn"), () => api("/student_data", { method: "POST", body: { student_id: id } }));
+        const data = await api("/student_data", { method: "POST", body: { student_id: id } });
         const s = data.student;
         info.append(
             el("h3", {}, s.name),
@@ -212,8 +211,45 @@ async function downloadCsv(studentId) {
     }
 }
 
-$("fetchStudentBtn").addEventListener("click", fetchStudentData);
-$("studentIdInput").addEventListener("keydown", (e) => { if (e.key === "Enter") fetchStudentData(); });
+const searchStudents = debounce(async () => {
+    const q = $("studentSearchInput").value.trim();
+    const out = $("studentSearchResults");
+    out.innerHTML = "";
+    if (q.length < 1) return;
+    try {
+        const matches = await api(`/search_students?q=${encodeURIComponent(q)}`);
+        if (!matches.length) {
+            out.append(el("p", { class: "empty-state" }, "No matching students."));
+            return;
+        }
+        matches.forEach((m) => {
+            const row = el("div", { class: "student-card" });
+            const btn = el("button", { type: "button" }, `#${m.student_id} — ${m.name}`);
+            btn.addEventListener("click", () => {
+                $("studentSearchResults").innerHTML = "";
+                fetchStudentData(m.student_id);
+            });
+            row.append(btn);
+            out.append(row);
+        });
+    } catch (e) {
+        toast(e.message, "error");
+    }
+}, 300);
+
+$("studentSearchInput").addEventListener("input", searchStudents);
+$("studentSearchInput").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const v = $("studentSearchInput").value.trim();
+    if (/^\d+$/.test(v)) {
+        // Pure number — jump straight to that ID.
+        $("studentSearchResults").innerHTML = "";
+        fetchStudentData(v);
+    } else {
+        searchStudents();
+    }
+});
 
 // --- add student ---
 $("addStudentForm").addEventListener("submit", async (e) => {

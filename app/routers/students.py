@@ -5,7 +5,7 @@ from typing import Dict, List
 
 import duckdb
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.auth import require_bearer_token
@@ -77,6 +77,40 @@ def _query_student_data(student_id: int) -> Dict:
 @router.post("/student_data", summary="Get detailed student information")
 def get_student_data(query: StudentQuery) -> Dict:
     return _query_student_data(query.student_id)
+
+
+@router.get("/search_students", summary="Search students by ID or partial name")
+def search_students(q: str = Query(..., min_length=1, max_length=100)) -> List[Dict]:
+    """Returns up to 20 matches. Numeric query matches student_id exactly
+    and is also tried as a name fragment; non-numeric query is a case-
+    insensitive name fragment."""
+    pattern = f"%{q}%"
+    with get_conn(read_only=True) as con:
+        if q.isdigit():
+            rows = con.execute(
+                """
+                SELECT student_id, name
+                FROM student
+                WHERE student_id = ? OR name ILIKE ?
+                ORDER BY
+                    CASE WHEN student_id = ? THEN 0 ELSE 1 END,
+                    name
+                LIMIT 20
+                """,
+                [int(q), pattern, int(q)],
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """
+                SELECT student_id, name
+                FROM student
+                WHERE name ILIKE ?
+                ORDER BY name
+                LIMIT 20
+                """,
+                [pattern],
+            ).fetchall()
+    return [{"student_id": r[0], "name": r[1]} for r in rows]
 
 
 @router.post("/add_student", summary="Add a new student", status_code=201)
