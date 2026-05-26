@@ -8,6 +8,20 @@
 # This uses the exact directives SRCF documents at
 # https://docs.srcf.net/reference/web-hosting/web-applications/.
 
+# --- Password protection (optional but recommended) ------------------
+# Apache pops up a native browser login dialog before anything else loads.
+# Generate ~/.htpasswd with:
+#     printf "admin:" > ~/.htpasswd
+#     openssl passwd -apr1 >> ~/.htpasswd     # type your password twice
+# Then chmod 600 ~/.htpasswd
+#
+# Uncomment the four lines below (and update the path) to enable.
+# AuthType Basic
+# AuthName "Tutorial Center"
+# AuthUserFile /home/<YOUR-CRSID>/.htpasswd
+# Require valid-user
+# ---------------------------------------------------------------------
+
 RequestHeader set Host expr=%{HTTP_HOST}
 RequestHeader set X-Forwarded-For expr=%{REMOTE_ADDR}
 RequestHeader set X-Forwarded-Proto expr=%{REQUEST_SCHEME}

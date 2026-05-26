@@ -207,6 +207,45 @@ Then in a browser, open `https://<crsid>.user.srcf.net/class_management/`.
 The UI loads, the health badge in the corner turns green, and entering
 a student ID returns data.
 
+## Adding a password to the page
+
+The simplest gate is Apache HTTP Basic Auth: a native browser login
+dialog before anything loads. No code change — just a one-time setup.
+
+```bash
+# On sinkhole, create the password file in your home (not public_html!):
+printf "admin:" > ~/.htpasswd
+openssl passwd -apr1 >> ~/.htpasswd        # prompts for password twice
+chmod 600 ~/.htpasswd
+
+# Uncomment the four AuthType lines at the top of the .htaccess and
+# replace <YOUR-CRSID> with your actual CRSid:
+sed -i 's|^# AuthType Basic|AuthType Basic|;
+        s|^# AuthName ".*"|AuthName "Tutorial Center"|;
+        s|^# AuthUserFile .*|AuthUserFile /home/'"$USER"'/.htpasswd|;
+        s|^# Require valid-user|Require valid-user|' \
+        ~/public_html/class_management/.htaccess
+```
+
+Reload the page — the browser prompts for username (`admin`) and the
+password you set. Changing the password later:
+
+```bash
+printf "admin:" > ~/.htpasswd
+openssl passwd -apr1 >> ~/.htpasswd
+```
+
+Multiple users:
+
+```bash
+printf "alice:$(openssl passwd -apr1)\n" >> ~/.htpasswd
+printf "bob:$(openssl passwd -apr1)\n"   >> ~/.htpasswd
+```
+
+This gates **everything** behind the proxy (UI, API, static files), so
+you can leave `API_BEARER_TOKEN` empty in `.env` — Basic Auth is the
+single gate.
+
 ## Day-to-day
 
 ```bash
