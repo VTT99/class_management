@@ -1,3 +1,5 @@
+from typing import Dict, List
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import require_bearer_token
@@ -7,7 +9,7 @@ router = APIRouter(prefix="", tags=["courses"], dependencies=[Depends(require_be
 
 
 @router.get("/search_courses", summary="Search for courses + available start times")
-def search_courses(course_name_partial: str = Query(..., min_length=1)) -> list[dict]:
+def search_courses(course_name_partial: str = Query(..., min_length=1)) -> List[Dict]:
     with get_conn(read_only=True) as con:
         matching = con.execute(
             "SELECT course_id, course_name FROM course WHERE course_name ILIKE ?",
@@ -39,7 +41,7 @@ def search_courses(course_name_partial: str = Query(..., min_length=1)) -> list[
 
 
 @router.get("/lesson_participants", summary="Get students registered for a lesson")
-def lesson_participants(lesson_id: int = Query(..., gt=0)) -> list[dict]:
+def lesson_participants(lesson_id: int = Query(..., gt=0)) -> List[Dict]:
     with get_conn(read_only=True) as con:
         rows = con.execute(
             """

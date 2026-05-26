@@ -1,4 +1,5 @@
 import logging
+from typing import Dict
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
@@ -118,14 +119,14 @@ def sync_calendar_events(req: CalendarGenerationRequest) -> dict:
 
     df = _fetch_lessons_in_window(start_dt, end_dt)
     course_colors = {cid: str((i % 11) + 1) for i, cid in enumerate(df["course_id"].unique())} if not df.empty else {}
-    db_events: dict[str, dict] = {}
+    db_events: Dict[str, dict] = {}
     if not df.empty:
         for lesson_id, group in df.groupby("lesson_id"):
             db_events[str(lesson_id)] = build_event_body(
                 group, group.iloc[0]["course_name"], lesson_id, course_colors,
             )
 
-    cal_events: dict[str, dict] = {}
+    cal_events: Dict[str, dict] = {}
     page_token = None
     try:
         while True:

@@ -1,5 +1,5 @@
 from datetime import date, time
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -54,7 +54,7 @@ class AttendanceRequest(BaseModel):
 
 class BulkAttendanceRequest(BaseModel):
     lesson_id: int = Field(..., gt=0)
-    student_ids: list[int] = Field(..., min_length=1)
+    student_ids: List[int] = Field(..., min_length=1)
 
 
 class LessonParticipation(BaseModel):

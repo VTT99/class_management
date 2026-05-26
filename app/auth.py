@@ -1,11 +1,13 @@
 """Optional bearer-token auth. When API_BEARER_TOKEN is empty, auth is disabled."""
 
+from typing import Optional
+
 from fastapi import Header, HTTPException, status
 
 from app.config import get_settings
 
 
-def require_bearer_token(authorization: str | None = Header(default=None)) -> None:
+def require_bearer_token(authorization: Optional[str] = Header(default=None)) -> None:
     token = get_settings().api_bearer_token
     if not token:
         return

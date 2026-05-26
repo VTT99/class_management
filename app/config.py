@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import List
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     )
 
     @property
-    def allowed_origins_list(self) -> list[str]:
+    def allowed_origins_list(self) -> List[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
     @property

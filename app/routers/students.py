@@ -1,6 +1,7 @@
 import logging
 from datetime import date
 from io import StringIO
+from typing import Dict, List
 
 import duckdb
 import pandas as pd
@@ -17,7 +18,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="", tags=["students"], dependencies=[Depends(require_bearer_token)])
 
 
-def _query_student_data(student_id: int) -> dict:
+def _query_student_data(student_id: int) -> Dict:
     with get_conn(read_only=True) as con:
         student_df = con.execute(
             "SELECT * FROM student WHERE student_id = ?", [student_id]
@@ -51,8 +52,8 @@ def _query_student_data(student_id: int) -> dict:
             axis=1,
         )
 
-    course_summary: dict = {}
-    lessons_status: dict = {}
+    course_summary: Dict = {}
+    lessons_status: Dict = {}
     if not lessons_df.empty:
         for course_id, group in lessons_df.groupby("course_id"):
             course_summary[int(course_id)] = {
@@ -74,12 +75,12 @@ def _query_student_data(student_id: int) -> dict:
 
 
 @router.post("/student_data", summary="Get detailed student information")
-def get_student_data(query: StudentQuery) -> dict:
+def get_student_data(query: StudentQuery) -> Dict:
     return _query_student_data(query.student_id)
 
 
 @router.post("/add_student", summary="Add a new student", status_code=201)
-def add_student(student: NewStudent) -> dict:
+def add_student(student: NewStudent) -> Dict:
     with get_conn(read_only=False) as con:
         try:
             row = con.execute("SELECT MAX(student_id) FROM student").fetchone()
@@ -113,7 +114,7 @@ def add_student(student: NewStudent) -> dict:
 @router.get("/students/{student_id}/lessons.csv", summary="Export a student's lessons as CSV")
 def export_student_lessons_csv(student_id: int) -> StreamingResponse:
     data = _query_student_data(student_id)
-    rows: list[dict] = []
+    rows: List[Dict] = []
     for course_id, lessons in data["lessons"].items():
         course = data["course_summary"][course_id]
         for lesson in lessons:

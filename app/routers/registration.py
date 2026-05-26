@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -9,7 +10,7 @@ from app.models import NewRegistration
 router = APIRouter(prefix="", tags=["registration"], dependencies=[Depends(require_bearer_token)])
 
 
-def _course_registration_columns(con) -> list[str]:
+def _course_registration_columns(con) -> List[str]:
     return [r[1] for r in con.execute("PRAGMA table_info('course_registration')").fetchall()]
 
 
@@ -20,7 +21,7 @@ def _insert_registration(con, student_id: int, lesson_id: int, course_id: int) -
     `course_id`), so we inspect the table and only populate columns that exist.
     """
     cols = _course_registration_columns(con)
-    payload: dict[str, object] = {
+    payload: Dict[str, object] = {
         "student_id": student_id,
         "lesson_id": lesson_id,
         "datetime_of_registration": datetime.now(),
@@ -40,7 +41,7 @@ def _insert_registration(con, student_id: int, lesson_id: int, course_id: int) -
 
 
 @router.post("/register_lessons", summary="Register a student for the next N lessons")
-def register_lessons(reg: NewRegistration) -> dict:
+def register_lessons(reg: NewRegistration) -> Dict:
     with get_conn(read_only=False) as con:
         if not con.execute("SELECT 1 FROM student WHERE student_id = ?", [reg.student_id]).fetchone():
             raise HTTPException(404, detail=f"Student {reg.student_id} not found.")
