@@ -1,0 +1,20 @@
+# Tutorial Center — Caddy reverse-proxy snippet.
+# Place this in /etc/caddy/Caddyfile (or `import` it from your main Caddyfile).
+# Caddy auto-issues a Let's Encrypt certificate for the configured hostname.
+#
+# Replace `test.com` with your real domain. The sub-path /class_management
+# must match ROOT_PATH in /opt/class_management/.env.
+
+test.com {
+    encode zstd gzip
+
+    # Tutorial Center, served under /class_management
+    handle_path /class_management/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # Everything else on the domain — replace or remove as needed.
+    handle {
+        respond "test.com is up" 200
+    }
+}

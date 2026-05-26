@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     timezone: str = Field(default="Asia/Hong_Kong", alias="TIMEZONE")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     api_bearer_token: str = Field(default="", alias="API_BEARER_TOKEN")
+    root_path: str = Field(default="", alias="ROOT_PATH")
 
     @property
     def duckdb_path(self) -> Path:

@@ -1,0 +1,27 @@
+[Unit]
+Description=Tutorial Center (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=class-management
+Group=class-management
+WorkingDirectory=/opt/class_management
+EnvironmentFile=/opt/class_management/.env
+ExecStart=/opt/class_management/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 --port 8000 \
+    --workers 2 \
+    --root-path ${ROOT_PATH} \
+    --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=3
+
+# Light hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/class_management/data
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,6 @@
-// Tutorial Center frontend. Talks to its own host.
-const API = "";
+// Tutorial Center frontend. Talks to its own host, optionally under a sub-path.
+// The server injects the prefix into the <script> tag via data-root-path.
+const API = document.querySelector("script[data-root-path]")?.dataset.rootPath ?? "";
 
 // --- tiny helpers ---
 const $ = (id) => document.getElementById(id);
@@ -138,7 +139,7 @@ async function fetchStudentData() {
             renderCourseLessons(courseIds[0]);
         }
 
-        csvLink.href = `/students/${id}/lessons.csv`;
+        csvLink.href = `${API}/students/${id}/lessons.csv`;
         csvLink.classList.remove("hidden");
     } catch (e) {
         toast(e.message, "error");

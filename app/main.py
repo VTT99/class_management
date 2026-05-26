@@ -1,8 +1,9 @@
 import logging
+from functools import lru_cache
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import REPO_ROOT, get_settings
@@ -20,11 +21,13 @@ app = FastAPI(
     title="Tutorial Center API",
     description="Manage students, lessons, attendance and Google Calendar events for a tutorial center.",
     version="3.0.0",
+    root_path=settings.root_path,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
+    allow_origins=["*"] if settings.root_path else
+        ["http://127.0.0.1:8000", "http://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,9 +42,15 @@ app.include_router(calendar.router)
 app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "static")), name="static")
 
 
-@app.get("/", include_in_schema=False)
-def index() -> FileResponse:
-    return FileResponse(REPO_ROOT / "templates" / "index.html")
+@lru_cache(maxsize=1)
+def _rendered_index() -> str:
+    html = (REPO_ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    return html.replace("{{ root_path }}", settings.root_path)
+
+
+@app.get("/", include_in_schema=False, response_class=HTMLResponse)
+def index() -> HTMLResponse:
+    return HTMLResponse(_rendered_index())
 
 
 @app.get("/health", tags=["meta"])
