@@ -1,5 +1,6 @@
 fastapi>=0.110
 uvicorn[standard]>=0.27
+a2wsgi>=1.10           # Lets Phusion Passenger (cPanel shared hosts) serve our ASGI app
 pydantic>=2.6
 pydantic-settings>=2.2
 duckdb>=1.0

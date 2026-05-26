@@ -10,13 +10,14 @@ Repo path: ~/class_management   (local)
            /opt/class_management (server)
 ```
 
-The app runs the same way locally and on a remote server. The only
-difference is the **`ROOT_PATH`** env var:
+Three supported environments — the code is identical, only `.env` and the
+process manager differ:
 
-| Where      | `ROOT_PATH`            | URL                                            |
-| ---------- | ---------------------- | ---------------------------------------------- |
-| Laptop dev | empty (the default)    | `http://127.0.0.1:8000/`                       |
-| Server     | `/class_management`    | `https://test.com/class_management/`           |
+| Where                       | `ROOT_PATH`         | Runner             | URL                                       |
+| --------------------------- | ------------------- | ------------------ | ----------------------------------------- |
+| Laptop dev                  | empty (default)     | `uvicorn --reload` | `http://127.0.0.1:8000/`                  |
+| VPS (your own Ubuntu box)   | `/class_management` | systemd + Caddy    | `https://test.com/class_management/`      |
+| Shared hosting (cPanel)     | `/class_management` | Phusion Passenger  | `https://your-domain/class_management/`   |
 
 ---
 
@@ -136,22 +137,65 @@ sudo systemctl restart class-management
 
 ---
 
+## Running on shared hosting (cPanel)
+
+For cPanel-based shared hosts (Namecheap, Bluehost, A2, DreamHost, school
+servers with "Setup Python App", …). Full click-by-click walkthrough is in
+[`docs/DEPLOY_CPANEL.md`](docs/DEPLOY_CPANEL.md) — TL;DR:
+
+1. SSH or File-Manager the repo to `~/class_management/` (NOT inside
+   `~/public_html/`).
+2. In `.env`, set `ROOT_PATH=/class_management` and
+   `API_BEARER_TOKEN=…` (always token-protect on shared hosting).
+3. Upload `secrets/service_account.json` (chmod 600).
+4. cPanel → **Setup Python App** → **Create Application**:
+    - Application root: `class_management`
+    - Application URL: `your-domain.com/class_management`
+    - Startup file: `passenger_wsgi.py`
+    - Entry point: `application`
+5. Run `pip install -r requirements.txt` (cPanel UI button, or `pip` in
+   the venv it creates).
+6. Hydrate the DB: `python -m scripts.download_sheet_to_db`.
+7. Restart: `touch ~/class_management/tmp/restart.txt`.
+
+Open `https://your-domain/class_management/` in a browser.
+
+Day-to-day:
+
+```bash
+cd ~/class_management && git pull
+source ~/virtualenv/class_management/3.11/bin/activate
+pip install -r requirements.txt
+touch tmp/restart.txt    # tells Passenger to relaunch the Python process
+```
+
+The `passenger_wsgi.py` entry point at the repo root is what cPanel calls;
+it wraps the ASGI app with `a2wsgi` so Passenger (which only speaks WSGI)
+can talk to FastAPI. You never run `uvicorn` yourself on shared hosting —
+Passenger manages the process.
+
+---
+
 ## Repo layout
 
 ```
-app/         FastAPI app (routers, models, db helpers, services)
-static/      JS + CSS served at /static/
-templates/   HTML served at /
-scripts/     ETL: download_sheet_to_db.py, seed_test_data.py
-tests/       pytest suite
-data/        DuckDB file (gitignored)
-secrets/     Service-account JSON (gitignored)
-deploy/      systemd unit + Caddyfile for production
-docs/        USAGE.md (API reference) + DEPLOY.md (server walkthrough)
+app/                 FastAPI app (routers, models, db helpers, services)
+static/              JS + CSS served at /static/
+templates/           HTML served at /
+scripts/             ETL: download_sheet_to_db.py, seed_test_data.py
+tests/               pytest suite
+data/                DuckDB file (gitignored)
+secrets/             Service-account JSON (gitignored)
+deploy/              systemd unit + Caddyfile for VPS deploy
+passenger_wsgi.py    Entry point for cPanel "Setup Python App" (Passenger)
+docs/                USAGE.md (API), DEPLOY.md (VPS), DEPLOY_CPANEL.md (shared hosting)
 ```
 
 ## Reference
 
 - **API endpoints, request/response shapes, DB schema, troubleshooting:**
   [`docs/USAGE.md`](docs/USAGE.md).
-- **Full deployment walkthrough:** [`docs/DEPLOY.md`](docs/DEPLOY.md).
+- **VPS deployment (Ubuntu + Caddy + systemd):**
+  [`docs/DEPLOY.md`](docs/DEPLOY.md).
+- **Shared-hosting deployment (cPanel + Passenger):**
+  [`docs/DEPLOY_CPANEL.md`](docs/DEPLOY_CPANEL.md).
