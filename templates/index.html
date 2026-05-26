@@ -171,8 +171,18 @@
 
         <h4>Add student to this class</h4>
         <div class="form-row">
-            <input type="text" id="lessonAddStudentInput" placeholder="Search students by ID or name..." autocomplete="off" style="flex: 1;">
+            <input type="text" id="lessonAddStudentInput" placeholder="Search students by ID or name..." autocomplete="off" style="flex: 1; min-width: 200px;">
+            <label class="inline-check">
+                Add to next
+                <input type="number" id="lessonAddCount" min="1" max="52" value="1">
+                class(es)
+            </label>
         </div>
+        <p class="muted" style="margin: 0 0 8px;">
+            Set to 1 for just this class, or higher to register the student
+            for the next N occurrences in the same course (skipping ones
+            they're already booked into).
+        </p>
         <div id="lessonAddStudentResults" class="result-block"></div>
 
         <div class="modal-actions" style="margin-top: 16px;">

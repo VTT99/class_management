@@ -151,8 +151,12 @@ async function fetchStudentData(studentId) {
         } else {
             courseIds.forEach((cid, idx) => {
                 const c = currentSummary[cid];
-                const btn = el("button", { type: "button", dataset: { courseId: cid }, "aria-pressed": idx === 0 ? "true" : "false" },
-                    `${c.course_name} (${c.completed}/${c.total})`);
+                const btn = el("button", {
+                    type: "button",
+                    dataset: { courseId: cid },
+                    "aria-pressed": idx === 0 ? "true" : "false",
+                    title: `${c.completed} attended · ${c.uncomplete} missed · ${c.not_yet_complete} outstanding · ${c.total} total`,
+                }, `${c.course_name} (${c.not_yet_complete} outstanding)`);
                 btn.addEventListener("click", () => renderCourseLessons(cid));
                 tabs.append(btn);
             });
@@ -175,7 +179,16 @@ function renderCourseLessons(courseId) {
     const summary = currentSummary[courseId];
     const lessons = currentLessons[courseId] || [];
 
-    details.append(el("h4", {}, `${summary.course_name} — ${summary.completed} done, ${summary.uncomplete} missed, ${summary.not_yet_complete} upcoming`));
+    details.append(
+        el("h4", { style: "margin-bottom: 4px;" }, summary.course_name),
+        el("div", { class: "course-stats" },
+            el("span", { class: "stat stat-outstanding", title: "Future lessons the student is registered for but hasn't attended yet" },
+                `${summary.not_yet_complete} outstanding`),
+            el("span", { class: "stat stat-completed" }, `${summary.completed} attended`),
+            el("span", { class: "stat stat-missed" }, `${summary.uncomplete} missed`),
+            el("span", { class: "stat stat-total" }, `${summary.total} total`),
+        ),
+    );
 
     if (!lessons.length) {
         details.append(el("p", { class: "empty-state" }, "No lessons recorded."));
@@ -373,6 +386,24 @@ async function renderWeek() {
         return;
     }
     lessons.forEach((l) => placeLessonInWeek(grid, l));
+
+    // Now-indicator: a red line at the current time, but only if the
+    // user is looking at the current week.
+    const now = new Date();
+    if (now >= start && now < addDays(end, 1)) {
+        const HOUR_START = 8;
+        const ROW_HEIGHT = 50;
+        const HEADER_ROW = ROW_HEIGHT; // one header row, same height
+        const totalMinutes = (now.getHours() - HOUR_START) * 60 + now.getMinutes();
+        if (totalMinutes >= 0 && totalMinutes <= (21 - HOUR_START + 1) * 60) {
+            const top = HEADER_ROW + (totalMinutes / 60) * ROW_HEIGHT;
+            grid.append(el("div", {
+                class: "week-now-indicator",
+                style: `top: ${top}px;`,
+                title: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            }));
+        }
+    }
 }
 
 function placeLessonInWeek(grid, lesson) {
@@ -608,15 +639,31 @@ const searchStudentsForLesson = debounce(async () => {
         }
         matches.forEach((m) => {
             const row = el("div", { class: "student-card" });
-            const btn = el("button", { type: "button" }, `#${m.student_id} — ${m.name}  ·  Add`);
+            const count = parseInt($("lessonAddCount").value, 10) || 1;
+            const label = count > 1
+                ? `#${m.student_id} — ${m.name}  ·  Add to ${count} classes`
+                : `#${m.student_id} — ${m.name}  ·  Add`;
+            const btn = el("button", { type: "button" }, label);
             btn.addEventListener("click", async () => {
                 btn.disabled = true;
+                const n = parseInt($("lessonAddCount").value, 10) || 1;
                 try {
-                    await api("/add_lesson_registration", {
-                        method: "POST",
-                        body: { student_id: m.student_id, lesson_id: currentLesson.lesson_id },
-                    });
-                    toast(`Added ${m.name} to this class`, "success");
+                    if (n <= 1) {
+                        await api("/add_lesson_registration", {
+                            method: "POST",
+                            body: { student_id: m.student_id, lesson_id: currentLesson.lesson_id },
+                        });
+                        toast(`Added ${m.name} to this class`, "success");
+                    } else {
+                        const r = await api("/add_to_next_n_lessons", {
+                            method: "POST",
+                            body: { student_id: m.student_id, lesson_id: currentLesson.lesson_id, count: n },
+                        });
+                        const addedN = r.added?.length || 0;
+                        const skippedN = r.skipped?.length || 0;
+                        toast(`Added ${m.name} to ${addedN} class(es)${skippedN ? `, skipped ${skippedN} already-booked` : ""}`,
+                            "success");
+                    }
                     $("lessonAddStudentInput").value = "";
                     out.innerHTML = "";
                     await refreshLessonParticipants(currentLesson.lesson_id);
@@ -634,6 +681,7 @@ const searchStudentsForLesson = debounce(async () => {
 }, 300);
 
 $("lessonAddStudentInput").addEventListener("input", searchStudentsForLesson);
+$("lessonAddCount").addEventListener("input", searchStudentsForLesson);
 
 // --- Add Class modal (single / weekly-N-days / daily) ---
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];

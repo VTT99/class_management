@@ -174,7 +174,8 @@ button.is-loading::after {
 .empty-state { color: var(--muted); font-style: italic; padding: 8px; }
 
 .link { color: var(--primary); text-decoration: underline; cursor: pointer; }
-.hidden { display: none !important; }
+.hidden,
+[hidden] { display: none !important; }
 
 table {
     width: 100%;
@@ -200,6 +201,37 @@ tbody tr:nth-child(even) { background: #fafbfc; }
 .status-completed { color: var(--success); font-weight: 600; }
 .status-uncomplete { color: var(--danger); font-weight: 600; }
 .status-not-yet-complete { color: var(--muted); }
+
+.course-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0 10px;
+}
+.course-stats .stat {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #f1f5f9;
+    color: var(--text);
+}
+.course-stats .stat-outstanding {
+    background: #fef3c7;
+    color: #92400e;
+}
+.course-stats .stat-completed {
+    background: #dcfce7;
+    color: var(--success);
+}
+.course-stats .stat-missed {
+    background: #fee2e2;
+    color: var(--danger);
+}
+.course-stats .stat-total {
+    background: #e0e7ff;
+    color: var(--primary-dark);
+}
 
 #participantsList { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin: 10px 0; }
 #participantsList label { margin: 0; color: var(--text); display: flex; align-items: center; gap: 8px; }
@@ -246,6 +278,7 @@ tbody tr:nth-child(even) { background: #fafbfc; }
 
 /* ---- Week time-grid: 8am-10pm rows x 7 day columns ---- */
 .week-grid {
+    position: relative;
     display: grid;
     grid-template-columns: 56px repeat(7, 1fr);
     grid-auto-rows: 50px;
@@ -255,6 +288,26 @@ tbody tr:nth-child(even) { background: #fafbfc; }
     margin-top: 12px;
     overflow: hidden;
     font-size: 12px;
+}
+
+.week-now-indicator {
+    position: absolute;
+    left: 56px;
+    right: 0;
+    height: 2px;
+    background: var(--danger);
+    z-index: 5;
+    pointer-events: none;
+}
+.week-now-indicator::before {
+    content: "";
+    position: absolute;
+    left: -5px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    background: var(--danger);
+    border-radius: 50%;
 }
 
 .week-grid-corner {
@@ -388,7 +441,18 @@ tbody tr:nth-child(even) { background: #fafbfc; }
     font-size: 14px;
     color: var(--text);
 }
-.inline-check input { margin: 0; }
+/* The global `label input` rule above forces display:block + width:100%
+   on inputs inside labels. We need to undo all of that for inline
+   checkboxes / spinboxes that share a label with text. */
+.inline-check input[type="checkbox"],
+.inline-check input[type="number"] {
+    display: inline-block;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    flex: 0 0 auto;
+}
+.inline-check input[type="number"] { width: 64px; }
 
 /* Utility tab blocks */
 .utility-block {

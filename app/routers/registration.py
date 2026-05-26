@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_bearer_token
 from app.db import get_conn
-from app.models import NewRegistration, SingleRegistration
+from app.models import NewRegistration, RegistrationStreak, SingleRegistration
 
 router = APIRouter(prefix="", tags=["registration"], dependencies=[Depends(require_bearer_token)])
 
@@ -133,4 +133,56 @@ def add_lesson_registration(reg: SingleRegistration) -> Dict:
         "message": "Student registered for lesson.",
         "student_id": reg.student_id,
         "lesson_id": reg.lesson_id,
+    }
+
+
+@router.post("/add_to_next_n_lessons", summary="Register a student to the next N lessons in this lesson's course, starting from this one")
+def add_to_next_n_lessons(req: RegistrationStreak) -> Dict:
+    """Useful for a one-click 'sign up for the rest of the course' flow.
+    Walks lessons in this course ordered by start_datetime, starting at
+    `lesson_id`. Adds registrations for each one the student isn't
+    already in, until `count` lessons have been processed."""
+    with get_conn(read_only=False) as con:
+        if not con.execute("SELECT 1 FROM student WHERE student_id = ?", [req.student_id]).fetchone():
+            raise HTTPException(404, detail=f"Student {req.student_id} not found.")
+        ref = con.execute(
+            "SELECT course_id, start_datetime FROM lesson WHERE lesson_id = ?",
+            [req.lesson_id],
+        ).fetchone()
+        if not ref:
+            raise HTTPException(404, detail=f"Lesson {req.lesson_id} not found.")
+        course_id, ref_start = ref
+
+        candidates = con.execute(
+            """
+            SELECT lesson_id, start_datetime
+            FROM lesson
+            WHERE course_id = ?
+              AND strptime(start_datetime, '%Y-%m-%d %H:%M:%S') >=
+                  strptime(?, '%Y-%m-%d %H:%M:%S')
+            ORDER BY start_datetime
+            LIMIT ?
+            """,
+            [course_id, ref_start, req.count],
+        ).fetchall()
+
+        added: List[Dict] = []
+        skipped: List[Dict] = []
+        for lid, sdt in candidates:
+            already = con.execute(
+                "SELECT 1 FROM course_registration WHERE student_id = ? AND lesson_id = ?",
+                [req.student_id, lid],
+            ).fetchone()
+            if already:
+                skipped.append({"lesson_id": lid, "reason": "already registered"})
+                continue
+            _insert_registration(con, req.student_id, lid, course_id)
+            added.append({"lesson_id": lid, "start_datetime": sdt})
+
+    return {
+        "message": f"Registered for {len(added)} lesson(s); skipped {len(skipped)}.",
+        "student_id": req.student_id,
+        "course_id": course_id,
+        "added": added,
+        "skipped": skipped,
     }

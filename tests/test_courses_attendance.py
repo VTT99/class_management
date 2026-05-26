@@ -169,6 +169,40 @@ def test_mark_attendance_bulk_pushes_absent(client):
     assert any(p["student_id"] == 1 for p in parts)
 
 
+def test_add_to_next_n_lessons(client):
+    """Registers a student to the next N occurrences of a recurring class,
+    skipping any they're already booked for."""
+    import datetime
+
+    base = (datetime.datetime.now() + datetime.timedelta(days=2)).replace(hour=11, minute=0, second=0, microsecond=0)
+    lesson_ids = []
+    for i in range(5):
+        s = base + datetime.timedelta(weeks=i)
+        e = s + datetime.timedelta(hours=1)
+        r = client.post("/add_lesson", json={
+            "course_id": 2,  # empty course in conftest
+            "start_datetime": s.strftime("%Y-%m-%d %H:%M:%S"),
+            "end_datetime": e.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        lesson_ids.append(r.json()["lesson_id"])
+
+    # Pre-register Alice for lesson index 2 so we can verify it gets skipped.
+    client.post("/add_lesson_registration", json={"student_id": 1, "lesson_id": lesson_ids[2]})
+
+    r = client.post("/add_to_next_n_lessons", json={
+        "student_id": 1, "lesson_id": lesson_ids[0], "count": 4,
+    })
+    assert r.status_code == 200, r.text
+    data = r.json()
+    added_ids = [a["lesson_id"] for a in data["added"]]
+    skipped_ids = [s["lesson_id"] for s in data["skipped"]]
+    # Should add lessons 0, 1, 3 (not 2 — already there).
+    assert lesson_ids[0] in added_ids
+    assert lesson_ids[1] in added_ids
+    assert lesson_ids[3] in added_ids
+    assert lesson_ids[2] in skipped_ids
+
+
 def test_mark_attendance_bulk_push_absent_finds_next_gap(client):
     """If Alice is already registered for the next lesson, push to the
     one after that ('first available gap' algorithm)."""

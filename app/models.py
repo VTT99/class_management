@@ -80,6 +80,12 @@ class SingleRegistration(BaseModel):
     lesson_id: int = Field(..., gt=0)
 
 
+class RegistrationStreak(BaseModel):
+    student_id: int = Field(..., gt=0)
+    lesson_id: int = Field(..., gt=0, description="Reference lesson; registers this + the next N-1 in the same course.")
+    count: int = Field(..., gt=0, le=104)
+
+
 class LessonSpec(BaseModel):
     course_id: int = Field(..., gt=0)
     start_datetime: str = Field(..., description="YYYY-MM-DD HH:MM:SS")
