@@ -49,3 +49,9 @@ def upload_table_to_sheet(client: gspread.Client, spreadsheet_id: str, name: str
         # Some buffer rows/cols so set_with_dataframe doesn't complain.
         ws = sh.add_worksheet(title=name, rows=str(max(len(df) + 5, 50)), cols=str(max(len(df.columns) + 2, 10)))
     set_with_dataframe(ws, df, include_index=False, resize=True)
+
+
+def download_table_from_sheet(client: gspread.Client, spreadsheet_id: str, name: str) -> pd.DataFrame:
+    sh = client.open_by_key(spreadsheet_id)
+    ws = sh.worksheet(name)
+    return pd.DataFrame(ws.get_all_records())

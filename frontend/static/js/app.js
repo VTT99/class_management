@@ -796,9 +796,14 @@ $("syncCalendarBtn").addEventListener("click", async (e) => {
     }
 });
 
-// --- Upload DB → Google Sheets ---
+// --- Upload DB → Google Sheets (DESTRUCTIVE: overwrites sheets) ---
 $("uploadSheetsBtn").addEventListener("click", async (e) => {
-    if (!confirm("Overwrite every worksheet in your Google Sheet with the current DB contents?")) return;
+    if (!confirm(
+        "Upload local DB to Google Sheets?\n\n" +
+        "This will OVERWRITE every worksheet (student, course, lesson, " +
+        "course_registration, attendance) with the current contents of the local DB. " +
+        "Anything you've manually edited in the Sheet will be lost."
+    )) return;
     try {
         const r = await withLoading(e.currentTarget, () => api("/upload_db_to_sheets", { method: "POST" }));
         const pushed = (r.pushed || []).map((p) => `${p.table} (${p.rows} rows)`).join(", ");
@@ -807,6 +812,29 @@ $("uploadSheetsBtn").addEventListener("click", async (e) => {
             console.warn("Skipped tables:", r.skipped);
             toast(`${r.skipped.length} table(s) skipped — see console`, "warn");
         }
+    } catch (err) {
+        toast(err.message, "error");
+    }
+});
+
+// --- Download Sheets → DB (DESTRUCTIVE: overwrites local DB) ---
+$("downloadSheetsBtn").addEventListener("click", async (e) => {
+    if (!confirm(
+        "Download Google Sheets into the local DB?\n\n" +
+        "This will OVERWRITE every table in the local database with the " +
+        "contents of the matching worksheet. Any changes made on this server " +
+        "since the last upload will be lost."
+    )) return;
+    try {
+        const r = await withLoading(e.currentTarget, () => api("/download_sheets_to_db", { method: "POST" }));
+        const loaded = (r.loaded || []).map((p) => `${p.table} (${p.rows} rows)`).join(", ");
+        toast(`Loaded: ${loaded || "nothing"}`, "success");
+        if (r.skipped?.length) {
+            console.warn("Skipped tables:", r.skipped);
+            toast(`${r.skipped.length} table(s) skipped — see console`, "warn");
+        }
+        // Refresh the calendar in case the user is staring at it.
+        if (calendarView === "week" || calendarView === "month") renderCalendar();
     } catch (err) {
         toast(err.message, "error");
     }

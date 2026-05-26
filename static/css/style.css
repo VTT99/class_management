@@ -390,6 +390,23 @@ tbody tr:nth-child(even) { background: #fafbfc; }
 }
 .inline-check input { margin: 0; }
 
+/* Utility tab blocks */
+.utility-block {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-top: 12px;
+    background: #fff;
+}
+.utility-block h4 {
+    margin: 0 0 4px;
+    color: var(--primary-dark);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 15px;
+}
+.utility-block p { margin: 4px 0 10px; }
+
 /* ---- Calendar grid (legacy 7-column list — kept for backward compat) ---- */
 .calendar-grid {
     display: grid;

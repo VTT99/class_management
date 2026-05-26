@@ -1,6 +1,7 @@
-"""Seed a Google Sheet with a small synthetic dataset for development.
+"""Push a clean demo dataset directly into the linked Google Sheet.
 
-Migrated off the deprecated oauth2client library.
+Writes student / course / lesson / course_registration / attendance worksheets
+with synthetic data covering today through the next 8 weeks.
 
 Run with:
     python -m scripts.seed_test_data
@@ -8,6 +9,7 @@ Run with:
 
 import logging
 import sys
+from datetime import datetime, timedelta
 
 import gspread
 import pandas as pd
@@ -24,71 +26,100 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-WEEKDAYS = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
+WEEKS_AHEAD = 8
 
 
-def _build_students() -> pd.DataFrame:
-    return pd.DataFrame({
-        "student_id": [1, 2],
-        "name": ["Alice", "Bob"],
-        "parent_contact": ["alice_parent@gmail.com", "bob_parent@gmail.com"],
-        "gender": ["F", "M"],
-        "date_of_register": [pd.Timestamp.today().normalize()] * 2,
-        "referee": ["Instagram", "Friend"],
-        "payment_method": ["Credit Card", "Cash"],
-    })
+def _build_dataset() -> dict[str, pd.DataFrame]:
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    monday_this_week = today - timedelta(days=today.weekday())
 
+    students = pd.DataFrame([
+        {"student_id": 1, "name": "Alice Chen",   "parent_contact": "alice_parent@example.com", "gender": "F",
+         "date_of_register": "2025-09-01", "referee": "Instagram", "payment_method": "Credit Card"},
+        {"student_id": 2, "name": "Bob Patel",    "parent_contact": "bob_parent@example.com",   "gender": "M",
+         "date_of_register": "2025-09-15", "referee": "Friend",    "payment_method": "Cash"},
+        {"student_id": 3, "name": "Carol Singh",  "parent_contact": "carol_parent@example.com", "gender": "F",
+         "date_of_register": "2025-10-02", "referee": "Web",       "payment_method": "Credit Card"},
+        {"student_id": 4, "name": "David Kim",    "parent_contact": "david_parent@example.com", "gender": "M",
+         "date_of_register": "2026-01-10", "referee": "Sibling",   "payment_method": "Bank Transfer"},
+        {"student_id": 5, "name": "Eve Tanaka",   "parent_contact": "eve_parent@example.com",   "gender": "F",
+         "date_of_register": "2026-02-22", "referee": "Web",       "payment_method": "Cash"},
+    ])
 
-def _build_courses() -> pd.DataFrame:
-    return pd.DataFrame({
-        "course_id": [1, 2],
-        "course_name": ["Art class", "Math class"],
-        "active": [True, True],
-    })
+    courses = pd.DataFrame([
+        {"course_id": 1, "course_name": "Maths Tutorial",  "active": True},
+        {"course_id": 2, "course_name": "Art Studio",      "active": True},
+        {"course_id": 3, "course_name": "Piano Lesson",    "active": True},
+    ])
 
+    # Patterns: (course_id, weekday-index Mon=0, start_hour, end_hour)
+    schedule = [
+        (1, 0, 10, 11),   # Maths Mon 10:00-11:00
+        (1, 2, 14, 15),   # Maths Wed 14:00-15:00
+        (2, 1, 16, 17),   # Art   Tue 16:00-17:00
+        (2, 4, 10, 12),   # Art   Fri 10:00-12:00
+        (3, 3, 18, 19),   # Piano Thu 18:00-19:00
+    ]
 
-def _build_lessons() -> pd.DataFrame:
-    rows = []
-    today = pd.Timestamp.today().normalize()
-    for course_id, weekday_name in [(1, "Monday"), (2, "Thursday")]:
-        target = WEEKDAYS[weekday_name]
-        first = today + pd.DateOffset(days=(target - today.weekday()) % 7)
-        for i in range(28):
-            start = first + pd.DateOffset(weeks=i)
-            end = start + pd.Timedelta(hours=1, minutes=30)
-            rows.append({
-                "lesson_id": f"{course_id}_{i+1}",
+    lesson_rows = []
+    lesson_id = 1
+    for w in range(WEEKS_AHEAD):
+        for (cid, wd, sh, eh) in schedule:
+            start = monday_this_week + timedelta(weeks=w, days=wd, hours=sh)
+            end = monday_this_week + timedelta(weeks=w, days=wd, hours=eh)
+            lesson_rows.append({
+                "lesson_id": lesson_id,
                 "start_datetime": start.strftime("%Y-%m-%d %H:%M:%S"),
                 "end_datetime": end.strftime("%Y-%m-%d %H:%M:%S"),
-                "course_id": course_id,
+                "course_id": cid,
             })
-    return pd.DataFrame(rows)
+            lesson_id += 1
+    lessons = pd.DataFrame(lesson_rows)
 
+    # Each student is registered for a subset of courses.
+    student_courses = {
+        1: [1, 2],         # Alice: Maths + Art
+        2: [1],            # Bob:   Maths
+        3: [2, 3],         # Carol: Art + Piano
+        4: [1, 3],         # David: Maths + Piano
+        5: [2],            # Eve:   Art
+    }
 
-def _build_registrations() -> pd.DataFrame:
-    rows = []
-    for i in range(10):
-        rows.append({"registration_id": f"A_{i+1}", "student_id": 1, "lesson_id": f"1_{i+1}",
-                     "datetime_of_registration": pd.Timestamp.now(), "status": "active"})
-        rows.append({"registration_id": f"B_{i+1}", "student_id": 2, "lesson_id": f"2_{i+1}",
-                     "datetime_of_registration": pd.Timestamp.now(), "status": "active"})
-    return pd.DataFrame(rows)
+    reg_rows = []
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for student_id, course_ids in student_courses.items():
+        for cid in course_ids:
+            for _, row in lessons[lessons["course_id"] == cid].iterrows():
+                reg_rows.append({
+                    "student_id": student_id,
+                    "lesson_id": row["lesson_id"],
+                    "datetime_of_registration": now_str,
+                    "status": "active",
+                })
+    registrations = pd.DataFrame(reg_rows)
 
-
-def _build_attendance(lessons: pd.DataFrame) -> pd.DataFrame:
-    out = []
-    plan = [(1, [1, 2, 3]), (2, [1, 2])]
-    for student_id, lesson_ix in plan:
-        for i in lesson_ix:
-            lid = f"{student_id}_{i}"
-            ts = lessons.loc[lessons["lesson_id"] == lid, "start_datetime"].values[0]
-            out.append({
-                "attendance_id": f"{'A' if student_id == 1 else 'B'}_{i}",
-                "student_id": student_id,
-                "lesson_id": lid,
-                "attendance_datetime": ts,
+    # Mark attendance for any lesson whose start is in the past (so the demo
+    # has 'completed' rows on the student page).
+    now = datetime.now()
+    att_rows = []
+    for r in reg_rows:
+        lesson = lessons[lessons["lesson_id"] == r["lesson_id"]].iloc[0]
+        start = datetime.strptime(lesson["start_datetime"], "%Y-%m-%d %H:%M:%S")
+        if start < now:
+            att_rows.append({
+                "student_id": r["student_id"],
+                "lesson_id": r["lesson_id"],
+                "attendance_datetime": lesson["start_datetime"],
             })
-    return pd.DataFrame(out)
+    attendance = pd.DataFrame(att_rows)
+
+    return {
+        "student": students,
+        "course": courses,
+        "lesson": lessons,
+        "course_registration": registrations,
+        "attendance": attendance,
+    }
 
 
 def main() -> int:
@@ -104,24 +135,17 @@ def main() -> int:
     client = gspread.authorize(creds)
     sh = client.open_by_key(settings.google_sheets_spreadsheet_id)
 
-    lessons = _build_lessons()
-    tables = {
-        "student": _build_students(),
-        "course": _build_courses(),
-        "lesson": lessons,
-        "course_registration": _build_registrations(),
-        "attendance": _build_attendance(lessons),
-    }
+    tables = _build_dataset()
 
     existing = {ws.title for ws in sh.worksheets()}
     for name, df in tables.items():
         if name in existing:
             sh.del_worksheet(sh.worksheet(name))
-        ws = sh.add_worksheet(title=name, rows=str(len(df) + 5), cols=str(len(df.columns)))
-        set_with_dataframe(ws, df)
+        ws = sh.add_worksheet(title=name, rows=str(len(df) + 5), cols=str(max(len(df.columns) + 2, 8)))
+        set_with_dataframe(ws, df, include_index=False, resize=True)
         log.info("Wrote %d rows to sheet '%s'", len(df), name)
 
-    log.info("Upload complete: https://docs.google.com/spreadsheets/d/%s", settings.google_sheets_spreadsheet_id)
+    log.info("Spreadsheet: https://docs.google.com/spreadsheets/d/%s", settings.google_sheets_spreadsheet_id)
     return 0
 
 

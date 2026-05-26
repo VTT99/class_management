@@ -16,6 +16,7 @@
         <nav role="tablist" aria-label="Sections">
             <button type="button" role="tab" data-page="studentPage" aria-selected="true">Student</button>
             <button type="button" role="tab" data-page="calendarPage" aria-selected="false">Calendar</button>
+            <button type="button" role="tab" data-page="utilityPage" aria-selected="false">Utility</button>
         </nav>
 
         <!-- === Student tab === -->
@@ -46,14 +47,34 @@
                     <button type="button" id="calendarNextBtn" class="btn-secondary">▶</button>
                     <button type="button" id="calendarTodayBtn" class="btn-secondary">Today</button>
                 </div>
-                <div class="form-row">
-                    <button type="button" id="openAddClassBtn">+ Add Class</button>
-                    <button type="button" id="syncCalendarBtn" class="btn-secondary" title="Push lessons to Google Calendar">Sync GCal</button>
-                    <button type="button" id="uploadSheetsBtn" class="btn-secondary" title="Push the local DB back to the Google Sheet">Upload DB → Sheets</button>
-                </div>
+                <button type="button" id="openAddClassBtn">+ Add Class</button>
             </div>
             <div id="calendarWeekGrid" class="week-grid"></div>
             <div id="calendarMonthGrid" class="month-grid" hidden></div>
+        </section>
+
+        <!-- === Utility tab === -->
+        <section id="utilityPage" class="page" role="tabpanel" hidden>
+            <h3>Google Calendar</h3>
+            <p class="muted">Push every lesson in the next month to the linked Google Calendar. Safe to re-run — only changed events get touched.</p>
+            <button type="button" id="syncCalendarBtn">Sync Google Calendar</button>
+
+            <hr>
+
+            <h3>Google Sheets ⇄ Database</h3>
+            <p class="muted">The Google Sheet is the canonical store; the local DuckDB is the working copy. These buttons sync between them.</p>
+
+            <div class="utility-block">
+                <h4>Upload  ·  DB → Sheets</h4>
+                <p class="muted">Push every table in the local DB back to its matching worksheet. <strong>Overwrites everything in those worksheets.</strong></p>
+                <button type="button" id="uploadSheetsBtn">Upload DB → Sheets</button>
+            </div>
+
+            <div class="utility-block">
+                <h4>Download  ·  Sheets → DB</h4>
+                <p class="muted">Pull every worksheet from the Google Sheet into the local DB. <strong>Overwrites the local DB.</strong> Use after editing the Sheet by hand or when a teammate uploaded changes.</p>
+                <button type="button" id="downloadSheetsBtn">Download Sheets → DB</button>
+            </div>
         </section>
     </div>
 
