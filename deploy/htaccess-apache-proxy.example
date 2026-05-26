@@ -1,0 +1,32 @@
+# Apache reverse-proxy config for the same-host layout.
+#
+# Place a copy of this file at:
+#     ~/public_html/class_management/.htaccess
+#
+# It expects:
+#   - mod_rewrite enabled (almost always on)
+#   - mod_proxy + mod_proxy_http enabled (your host may vary)
+#   - The FastAPI backend running on 127.0.0.1:8000 (see deploy/start.sh)
+#
+# The result:
+#     https://your-domain/class_management/                 -> index.html  (served by Apache)
+#     https://your-domain/class_management/static/...       -> static/...  (served by Apache)
+#     https://your-domain/class_management/api/student_data -> proxied to http://127.0.0.1:8000/student_data
+#
+# Browser sees one origin, so there is no CORS, no API URL leaking into JS,
+# and you don't need a bearer token to keep writes safe.
+
+RewriteEngine On
+
+# Forward everything under /api/ to the uvicorn process on localhost:8000.
+# The [P] flag invokes mod_proxy. The trailing $1 keeps the rest of the path.
+RewriteRule ^api/(.*)$ http://127.0.0.1:8000/$1 [P,L]
+
+# Don't rewrite real files / directories — let Apache serve them.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Optional: send 404s through index.html if you ever add client-side routing.
+# Leave this off otherwise.
+# RewriteRule . index.html [L]

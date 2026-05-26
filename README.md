@@ -10,15 +10,16 @@ Repo path: ~/class_management   (local)
            /opt/class_management (server)
 ```
 
-Four supported environments — the code is identical, only `.env` and the
+Five supported environments — the code is identical, only `.env` and the
 process manager differ:
 
-| Where                          | Runner             | URL                                       | Notes |
-| ------------------------------ | ------------------ | ----------------------------------------- | --- |
-| Laptop dev                     | `uvicorn --reload` | `http://127.0.0.1:8000/`                  | `ROOT_PATH=` empty |
-| VPS (your own Ubuntu box)      | systemd + Caddy    | `https://test.com/class_management/`      | `ROOT_PATH=/class_management` |
-| Shared hosting (cPanel)        | Phusion Passenger  | `https://your-domain/class_management/`   | `ROOT_PATH=/class_management` |
-| Static-only host + backend elsewhere | Apache + remote uvicorn | `https://your-domain/class_management/`   | Frontend in `public_html`, backend on a VPS / PaaS |
+| Where                                              | Runner                  | URL                                       | Notes |
+| -------------------------------------------------- | ----------------------- | ----------------------------------------- | --- |
+| Laptop dev                                         | `uvicorn --reload`      | `http://127.0.0.1:8000/`                  | `ROOT_PATH=` empty |
+| VPS (your own Ubuntu box)                          | systemd + Caddy         | `https://test.com/class_management/`      | `ROOT_PATH=/class_management` |
+| Shared hosting (cPanel)                            | Phusion Passenger       | `https://your-domain/class_management/`   | `ROOT_PATH=/class_management` |
+| Shared hosting (SSH, no cPanel, has `mod_proxy`)   | Apache + nohup uvicorn  | `https://your-domain/class_management/`   | Same host, .htaccess proxies `/api/*` to localhost |
+| Static-only host + backend elsewhere               | Apache + remote uvicorn | `https://your-domain/class_management/`   | Frontend in `public_html`, backend on a VPS / PaaS |
 
 ---
 
@@ -177,6 +178,47 @@ Passenger manages the process.
 
 ---
 
+## Running on the same shared host (Apache + nohup uvicorn)
+
+For a shared host where you have SSH, can run Python, and Apache supports
+`mod_proxy` via `.htaccess`. Full walkthrough in
+[`docs/DEPLOY_SAME_HOST.md`](docs/DEPLOY_SAME_HOST.md) — TL;DR:
+
+1. SSH in, clone the repo to `~/class_management/`, create a `.venv`,
+   `pip install -r requirements.txt`.
+2. In `.env` set:
+   ```
+   SERVE_FRONTEND=false
+   ROOT_PATH=/class_management/api
+   ```
+3. Start the backend:
+   ```bash
+   ./deploy/start.sh
+   ```
+   It `nohup`s uvicorn on `127.0.0.1:8000`, writes a pidfile to
+   `.uvicorn.pid`, and logs to `uvicorn.log`. Stop with `./deploy/stop.sh`.
+4. On your laptop, `python -m scripts.build_frontend`, then upload
+   `frontend/*` into `~/public_html/class_management/` on the host.
+5. Copy the .htaccess template in:
+   ```bash
+   cp ~/class_management/deploy/htaccess-apache-proxy.example \
+      ~/public_html/class_management/.htaccess
+   ```
+6. Edit `~/public_html/class_management/config.js`:
+   ```js
+   window.API_BASE = "/class_management/api";   // relative, same origin
+   window.API_TOKEN = "";
+   ```
+7. Open `https://your-domain/class_management/`.
+
+To survive a server reboot, add `@reboot cd ~/class_management &&
+./deploy/start.sh >/dev/null 2>&1` to your crontab.
+
+This is the simplest layout when you only have one host but it can run
+Python. No CORS, no token-in-JS exposure, one machine to manage.
+
+---
+
 ## Running with a split frontend (static-only Apache + backend elsewhere)
 
 For hosts that only serve static files from `public_html` (no Setup
@@ -220,9 +262,9 @@ scripts/             ETL + build_frontend.py
 tests/               pytest suite
 data/                DuckDB file (gitignored)
 secrets/             Service-account JSON (gitignored)
-deploy/              systemd unit + Caddyfile for VPS deploy
+deploy/              systemd unit + Caddyfile (VPS); start/stop scripts + .htaccess (shared host)
 passenger_wsgi.py    Entry point for cPanel "Setup Python App" (Passenger)
-docs/                USAGE, DEPLOY (VPS), DEPLOY_CPANEL, DEPLOY_SPLIT
+docs/                USAGE, DEPLOY (VPS), DEPLOY_CPANEL, DEPLOY_SAME_HOST, DEPLOY_SPLIT
 ```
 
 ## Reference
@@ -233,5 +275,7 @@ docs/                USAGE, DEPLOY (VPS), DEPLOY_CPANEL, DEPLOY_SPLIT
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 - **Shared-hosting deployment (cPanel + Passenger):**
   [`docs/DEPLOY_CPANEL.md`](docs/DEPLOY_CPANEL.md).
+- **Same-host deployment (SSH shared host, Apache `mod_proxy` + nohup uvicorn):**
+  [`docs/DEPLOY_SAME_HOST.md`](docs/DEPLOY_SAME_HOST.md).
 - **Split deployment (static frontend on Apache + backend elsewhere):**
   [`docs/DEPLOY_SPLIT.md`](docs/DEPLOY_SPLIT.md).
