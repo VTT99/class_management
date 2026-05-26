@@ -50,6 +50,16 @@ def tmp_db(tmp_path: Path) -> Path:
             attendance_datetime VARCHAR
         )
     """)
+    con.execute("""
+        CREATE TABLE purchase (
+            purchase_id BIGINT PRIMARY KEY,
+            student_id BIGINT NOT NULL,
+            course_id BIGINT NOT NULL,
+            count INTEGER NOT NULL,
+            payment_method VARCHAR,
+            purchase_datetime VARCHAR
+        )
+    """)
 
     # seed
     con.execute("INSERT INTO student VALUES (1, 'Alice', 'alice@x', 'F', '2025-01-01', 'web', 'Cash')")

@@ -78,12 +78,24 @@ class NewLesson(BaseModel):
 class SingleRegistration(BaseModel):
     student_id: int = Field(..., gt=0)
     lesson_id: int = Field(..., gt=0)
+    payment_method: Optional[str] = Field(default=None, description="If set, also records a 1-class purchase row.")
 
 
 class RegistrationStreak(BaseModel):
     student_id: int = Field(..., gt=0)
     lesson_id: int = Field(..., gt=0, description="Reference lesson; registers this + the next N-1 in the same course.")
     count: int = Field(..., gt=0, le=104)
+    payment_method: Optional[str] = Field(default=None, description="If set, also records a purchase row of size `count`.")
+
+
+class NewCourse(BaseModel):
+    course_name: str = Field(..., min_length=1, max_length=120)
+    active: bool = True
+
+
+class ExtendCourse(BaseModel):
+    course_id: int = Field(..., gt=0)
+    weeks: int = Field(..., gt=0, le=104, description="Extend each detected weekly slot by this many weeks beyond the last occurrence.")
 
 
 class LessonSpec(BaseModel):

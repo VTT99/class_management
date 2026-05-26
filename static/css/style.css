@@ -216,9 +216,17 @@ tbody tr:nth-child(even) { background: #fafbfc; }
     background: #f1f5f9;
     color: var(--text);
 }
+.course-stats .stat-paid {
+    background: #ddd6fe;
+    color: #5b21b6;
+}
 .course-stats .stat-outstanding {
     background: #fef3c7;
     color: #92400e;
+}
+.course-stats .stat-unassigned {
+    background: #fed7aa;
+    color: #9a3412;
 }
 .course-stats .stat-completed {
     background: #dcfce7;
@@ -472,6 +480,11 @@ tbody tr:nth-child(even) { background: #fafbfc; }
     font-size: 15px;
 }
 .utility-block p { margin: 4px 0 10px; }
+.utility-block.utility-warn {
+    border-color: #fcd34d;
+    background: #fffbeb;
+}
+.utility-block.utility-warn h4 { color: #92400e; }
 
 /* ---- Calendar grid (legacy 7-column list — kept for backward compat) ---- */
 .calendar-grid {

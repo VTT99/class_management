@@ -90,6 +90,7 @@ function showPage(id) {
         b.setAttribute("aria-selected", b.dataset.page === id ? "true" : "false");
     });
     if (id === "calendarPage") renderCalendar();
+    if (id === "coursePage") renderCourses();
 }
 
 document.querySelectorAll('nav button[data-page]').forEach((b) => {
@@ -151,12 +152,13 @@ async function fetchStudentData(studentId) {
         } else {
             courseIds.forEach((cid, idx) => {
                 const c = currentSummary[cid];
+                const tag = c.unassigned > 0 ? ` · ${c.unassigned} unassigned` : "";
                 const btn = el("button", {
                     type: "button",
                     dataset: { courseId: cid },
                     "aria-pressed": idx === 0 ? "true" : "false",
-                    title: `${c.completed} attended · ${c.uncomplete} missed · ${c.not_yet_complete} outstanding · ${c.total} total`,
-                }, `${c.course_name} (${c.not_yet_complete} outstanding)`);
+                    title: `paid: ${c.paid} · attended: ${c.completed} · outstanding: ${c.outstanding} · unassigned: ${c.unassigned}`,
+                }, `${c.course_name} (${c.outstanding} outstanding${tag})`);
                 btn.addEventListener("click", () => renderCourseLessons(cid));
                 tabs.append(btn);
             });
@@ -179,14 +181,22 @@ function renderCourseLessons(courseId) {
     const summary = currentSummary[courseId];
     const lessons = currentLessons[courseId] || [];
 
+    const subtitle = summary.payment_method
+        ? `Payment on file: ${summary.payment_method}`
+        : "No purchase recorded yet for this course.";
     details.append(
         el("h4", { style: "margin-bottom: 4px;" }, summary.course_name),
+        el("p", { class: "muted", style: "margin: 0 0 6px;" }, subtitle),
         el("div", { class: "course-stats" },
-            el("span", { class: "stat stat-outstanding", title: "Future lessons the student is registered for but hasn't attended yet" },
-                `${summary.not_yet_complete} outstanding`),
+            el("span", { class: "stat stat-paid", title: "Total classes the student has paid for in this course" },
+                `${summary.paid} paid`),
             el("span", { class: "stat stat-completed" }, `${summary.completed} attended`),
+            el("span", { class: "stat stat-outstanding", title: "paid - attended = classes still owed" },
+                `${summary.outstanding} outstanding`),
+            el("span", { class: "stat stat-unassigned", title: "Outstanding credits without a scheduled future class (auto-roll had no slot)" },
+                `${summary.unassigned} unassigned`),
             el("span", { class: "stat stat-missed" }, `${summary.uncomplete} missed`),
-            el("span", { class: "stat stat-total" }, `${summary.total} total`),
+            el("span", { class: "stat stat-total" }, `${summary.total} scheduled`),
         ),
     );
 
@@ -668,22 +678,35 @@ const searchStudentsForLesson = debounce(async () => {
             btn.addEventListener("click", async () => {
                 btn.disabled = true;
                 const n = parseInt($("lessonAddCount").value, 10) || 1;
+                const payment = $("lessonAddPayment").value.trim() || null;
                 try {
                     if (n <= 1) {
                         await api("/add_lesson_registration", {
                             method: "POST",
-                            body: { student_id: m.student_id, lesson_id: currentLesson.lesson_id },
+                            body: {
+                                student_id: m.student_id,
+                                lesson_id: currentLesson.lesson_id,
+                                payment_method: payment,
+                            },
                         });
-                        toast(`Added ${m.name} to this class`, "success");
+                        toast(`Added ${m.name} to this class${payment ? ` (${payment})` : ""}`, "success");
                     } else {
                         const r = await api("/add_to_next_n_lessons", {
                             method: "POST",
-                            body: { student_id: m.student_id, lesson_id: currentLesson.lesson_id, count: n },
+                            body: {
+                                student_id: m.student_id,
+                                lesson_id: currentLesson.lesson_id,
+                                count: n,
+                                payment_method: payment,
+                            },
                         });
                         const addedN = r.added?.length || 0;
                         const skippedN = r.skipped?.length || 0;
-                        toast(`Added ${m.name} to ${addedN} class(es)${skippedN ? `, skipped ${skippedN} already-booked` : ""}`,
-                            "success");
+                        const tail = payment ? ` (paid for ${n}, ${payment})` : "";
+                        toast(
+                            `Added ${m.name} to ${addedN} class(es)${skippedN ? `, skipped ${skippedN} already-booked` : ""}${tail}`,
+                            "success",
+                        );
                     }
                     $("lessonAddStudentInput").value = "";
                     out.innerHTML = "";
@@ -851,6 +874,101 @@ $("addClassForm").addEventListener("submit", async (e) => {
     }
 });
 
+// === Course tab =====================================================
+let allCourses = [];
+
+async function renderCourses() {
+    const list = $("courseList");
+    list.innerHTML = "";
+    try {
+        allCourses = await api("/courses");
+    } catch (e) {
+        toast(`Failed to load courses: ${e.message}`, "error");
+        return;
+    }
+    const q = $("courseSearchInput").value.trim().toLowerCase();
+    const shown = q
+        ? allCourses.filter((c) => c.course_name.toLowerCase().includes(q))
+        : allCourses;
+
+    if (!shown.length) {
+        list.append(el("p", { class: "empty-state" }, q ? "No matching courses." : "No courses yet."));
+        return;
+    }
+
+    shown.forEach((c) => {
+        const card = el("div", { class: "course-card" });
+        card.append(
+            el("h4", { style: "margin: 0 0 6px; color: var(--primary-dark);" },
+                `${c.course_name}  ·  #${c.course_id}${c.active ? "" : "  (inactive)"}`),
+            el("p", { class: "muted", style: "margin: 0 0 8px;" },
+                `${c.lesson_count} lesson(s)` +
+                (c.first_lesson ? `  ·  first: ${c.first_lesson.slice(0, 10)}` : "") +
+                (c.last_lesson ? `  ·  last: ${c.last_lesson.slice(0, 10)}` : "")),
+        );
+        const row = el("div", { class: "form-row", style: "margin-bottom: 0;" });
+        const extendBtn = el("button", { type: "button" }, "Extend recurring…");
+        extendBtn.addEventListener("click", () => openExtendCourseDialog(c));
+        row.append(extendBtn);
+        card.append(row);
+        list.append(card);
+    });
+}
+
+$("courseSearchInput").addEventListener("input", renderCourses);
+
+$("openAddCourseBtn").addEventListener("click", () => {
+    $("addCourseName").value = "";
+    $("addCourseActive").checked = true;
+    $("addCourseDialog").showModal();
+});
+
+$("addCourseForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = $("addCourseName").value.trim();
+    const active = $("addCourseActive").checked;
+    if (!name) return toast("Course name required", "warn");
+    const btn = e.currentTarget.querySelector("button[type=submit]");
+    try {
+        const r = await withLoading(btn, () => api("/add_course", {
+            method: "POST", body: { course_name: name, active },
+        }));
+        toast(`Created course #${r.course_id} (${r.course_name})`, "success");
+        $("addCourseDialog").close();
+        renderCourses();
+    } catch (err) {
+        toast(err.message, "error");
+    }
+});
+
+function openExtendCourseDialog(course) {
+    $("extendCourseSubtitle").textContent =
+        `${course.course_name} · ${course.lesson_count} existing lesson(s)`;
+    $("extendCourseDialog").dataset.courseId = course.course_id;
+    $("extendCourseWeeks").value = 8;
+    $("extendCourseDialog").showModal();
+}
+
+$("extendCourseForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const courseId = parseInt($("extendCourseDialog").dataset.courseId, 10);
+    const weeks = parseInt($("extendCourseWeeks").value, 10);
+    if (!courseId || !weeks) return toast("Pick a course and weeks", "warn");
+    const btn = e.currentTarget.querySelector("button[type=submit]");
+    try {
+        const r = await withLoading(btn, () => api("/extend_course", {
+            method: "POST", body: { course_id: courseId, weeks },
+        }));
+        toast(r.message, "success");
+        $("extendCourseDialog").close();
+        renderCourses();
+        if (calendarView) renderCalendar();
+    } catch (err) {
+        toast(err.message, "error");
+    }
+});
+
+
 // --- Sync Google Calendar ---
 $("syncCalendarBtn").addEventListener("click", async (e) => {
     if (!confirm("Sync the next 1 month of lessons to Google Calendar?")) return;
@@ -889,11 +1007,17 @@ $("uploadSheetsBtn").addEventListener("click", async (e) => {
 // --- Download Sheets → DB (DESTRUCTIVE: overwrites local DB) ---
 $("downloadSheetsBtn").addEventListener("click", async (e) => {
     if (!confirm(
-        "Download Google Sheets into the local DB?\n\n" +
-        "This will OVERWRITE every table in the local database with the " +
-        "contents of the matching worksheet. Any changes made on this server " +
-        "since the last upload will be lost."
+        "⚠ NOT FOR EVERYDAY USE.\n\n" +
+        "This pulls the Google Sheet into the local database, OVERWRITING:\n" +
+        "  • students added via this UI\n" +
+        "  • attendance you've marked\n" +
+        "  • push-absent re-registrations\n" +
+        "  • purchase history\n\n" +
+        "All of the above are LOST and replaced with whatever the Sheet currently has.\n\n" +
+        "You almost certainly want the Upload button (DB → Sheets) instead.\n\n" +
+        "Continue anyway?"
     )) return;
+    if (!confirm("Last check: REALLY overwrite the local DB with the Sheet's contents?")) return;
     try {
         const r = await withLoading(e.currentTarget, () => api("/download_sheets_to_db", { method: "POST" }));
         const loaded = (r.loaded || []).map((p) => `${p.table} (${p.rows} rows)`).join(", ");

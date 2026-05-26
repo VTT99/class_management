@@ -15,6 +15,7 @@
 
         <nav role="tablist" aria-label="Sections">
             <button type="button" role="tab" data-page="studentPage" aria-selected="true">Student</button>
+            <button type="button" role="tab" data-page="coursePage" aria-selected="false">Course</button>
             <button type="button" role="tab" data-page="calendarPage" aria-selected="false">Calendar</button>
             <button type="button" role="tab" data-page="utilityPage" aria-selected="false">Utility</button>
         </nav>
@@ -32,6 +33,15 @@
             <div id="studentInfo" class="result-block"></div>
             <div id="courseTabs" class="course-tabs"></div>
             <div id="lessonDetails"></div>
+        </section>
+
+        <!-- === Course tab === -->
+        <section id="coursePage" class="page" role="tabpanel" hidden>
+            <div class="form-row" style="justify-content: space-between;">
+                <input type="text" id="courseSearchInput" placeholder="Filter by name..." style="flex: 1; max-width: 320px;">
+                <button type="button" id="openAddCourseBtn">+ Add Course</button>
+            </div>
+            <div id="courseList"></div>
         </section>
 
         <!-- === Calendar tab === -->
@@ -70,10 +80,11 @@
                 <button type="button" id="uploadSheetsBtn">Upload DB → Sheets</button>
             </div>
 
-            <div class="utility-block">
-                <h4>Download  ·  Sheets → DB</h4>
-                <p class="muted">Pull every worksheet from the Google Sheet into the local DB. <strong>Overwrites the local DB.</strong> Use after editing the Sheet by hand or when a teammate uploaded changes.</p>
-                <button type="button" id="downloadSheetsBtn">Download Sheets → DB</button>
+            <div class="utility-block utility-warn">
+                <h4>⚠ Download  ·  Sheets → DB</h4>
+                <p class="muted"><strong>Not for everyday use.</strong> Pulls every worksheet from the Google Sheet into the local DB, <strong>overwriting</strong> everything the server has accumulated since the last upload — including new students added through this UI, attendance marks, push-absent re-registrations, and purchase history. Reserved for the rare case where you've manually edited the Sheet and want the server to match.</p>
+                <p class="muted">Day-to-day, all your changes live in this server's local DB and you should use <em>Upload</em> to push them to the Sheet, not the other way round.</p>
+                <button type="button" id="downloadSheetsBtn" class="btn-secondary">Download Sheets → DB</button>
             </div>
         </section>
     </div>
@@ -96,6 +107,42 @@
             <div class="modal-actions">
                 <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
                 <button type="submit">Add Student</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- === Modal: Add Course === -->
+    <dialog id="addCourseDialog" class="modal">
+        <form id="addCourseForm" method="dialog">
+            <h3>Add Course</h3>
+            <label>Course name<input type="text" id="addCourseName" required maxlength="120"></label>
+            <label class="inline-check">
+                <input type="checkbox" id="addCourseActive" checked>
+                Active (visible in Add Class dropdown)
+            </label>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
+                <button type="submit">Create</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- === Modal: Extend Course === -->
+    <dialog id="extendCourseDialog" class="modal">
+        <form id="extendCourseForm" method="dialog">
+            <h3>Extend Course</h3>
+            <p class="muted" id="extendCourseSubtitle"></p>
+            <p class="muted">
+                Detects each weekly slot the course currently has (weekday + start/end time)
+                and adds the chosen number of more weekly occurrences after the latest one
+                of each.
+            </p>
+            <label>Weeks to add
+                <input type="number" id="extendCourseWeeks" min="1" max="104" value="8">
+            </label>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
+                <button type="submit">Extend</button>
             </div>
         </form>
     </dialog>
@@ -173,15 +220,22 @@
         <div class="form-row">
             <input type="text" id="lessonAddStudentInput" placeholder="Search students by ID or name..." autocomplete="off" style="flex: 1; min-width: 200px;">
             <label class="inline-check">
-                Add to next
+                Classes:
                 <input type="number" id="lessonAddCount" min="1" max="52" value="1">
-                class(es)
             </label>
+            <input type="text" id="lessonAddPayment" list="paymentMethods" placeholder="Payment (e.g. Cash)" style="max-width: 200px;">
+            <datalist id="paymentMethods">
+                <option value="Credit Card">
+                <option value="Cash">
+                <option value="Bank Transfer">
+                <option value="Voucher">
+            </datalist>
         </div>
         <p class="muted" style="margin: 0 0 8px;">
-            Set to 1 for just this class, or higher to register the student
-            for the next N occurrences in the same course (skipping ones
-            they're already booked into).
+            Payment is recorded in the purchase history. Setting Classes to N
+            books the student into this class plus the next N-1 occurrences,
+            and the full N counts towards their <em>paid</em> total
+            (so unmatched credits show as &ldquo;unassigned&rdquo; on the Student tab).
         </p>
         <div id="lessonAddStudentResults" class="result-block"></div>
 

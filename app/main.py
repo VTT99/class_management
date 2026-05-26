@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import REPO_ROOT, get_settings
-from app.db import get_conn
+from app.db import ensure_schema, get_conn
 from app.routers import attendance, calendar, courses, registration, sheets, students
 
 settings = get_settings()
@@ -38,6 +38,14 @@ app.include_router(registration.router)
 app.include_router(attendance.router)
 app.include_router(calendar.router)
 app.include_router(sheets.router)
+
+# Ensure tables this app needs exist (e.g. `purchase` may not be in
+# older DuckDB files downloaded from Sheets).
+try:
+    ensure_schema()
+except Exception as e:  # pragma: no cover - logged, not fatal
+    log.warning("Schema bootstrap skipped: %s", e)
+
 
 if settings.serve_frontend:
     app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "static")), name="static")

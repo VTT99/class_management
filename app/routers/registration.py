@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -12,6 +12,21 @@ router = APIRouter(prefix="", tags=["registration"], dependencies=[Depends(requi
 
 def _course_registration_columns(con) -> List[str]:
     return [r[1] for r in con.execute("PRAGMA table_info('course_registration')").fetchall()]
+
+
+def _insert_purchase(con, student_id: int, course_id: int, count: int, payment_method: Optional[str]) -> int:
+    """Record a purchase: a student paid for `count` classes in `course_id`
+    using `payment_method`. Returns the new purchase_id. Used by the
+    add-student-to-class flow so 'outstanding' = paid - attended stays
+    accurate even when auto-rolling adds extra registrations."""
+    row = con.execute("SELECT MAX(purchase_id) FROM purchase").fetchone()
+    next_id = (row[0] if row and row[0] is not None else 0) + 1
+    con.execute(
+        "INSERT INTO purchase (purchase_id, student_id, course_id, count, payment_method, purchase_datetime) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [next_id, student_id, course_id, count, payment_method or "", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+    )
+    return next_id
 
 
 def _insert_registration(con, student_id: int, lesson_id: int, course_id: int) -> None:
@@ -129,10 +144,15 @@ def add_lesson_registration(reg: SingleRegistration) -> Dict:
 
         _insert_registration(con, reg.student_id, reg.lesson_id, course_id)
 
+        purchase_id = None
+        if reg.payment_method:
+            purchase_id = _insert_purchase(con, reg.student_id, course_id, 1, reg.payment_method)
+
     return {
         "message": "Student registered for lesson.",
         "student_id": reg.student_id,
         "lesson_id": reg.lesson_id,
+        "purchase_id": purchase_id,
     }
 
 
@@ -179,10 +199,18 @@ def add_to_next_n_lessons(req: RegistrationStreak) -> Dict:
             _insert_registration(con, req.student_id, lid, course_id)
             added.append({"lesson_id": lid, "start_datetime": sdt})
 
+        # Record the purchase so 'outstanding' counts the FULL paid amount
+        # regardless of how many candidate lessons we found (the rest become
+        # 'unassigned' credits the student can use when more lessons exist).
+        purchase_id = None
+        if req.payment_method:
+            purchase_id = _insert_purchase(con, req.student_id, course_id, req.count, req.payment_method)
+
     return {
         "message": f"Registered for {len(added)} lesson(s); skipped {len(skipped)}.",
         "student_id": req.student_id,
         "course_id": course_id,
         "added": added,
         "skipped": skipped,
+        "purchase_id": purchase_id,
     }

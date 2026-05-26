@@ -45,6 +45,24 @@ def _query_student_data(student_id: int) -> Dict:
             [student_id],
         ).fetchdf()
 
+        # paid count per course (SUM of purchase.count rows for this student).
+        # If the `purchase` table doesn't exist on an older DB, treat paid = 0.
+        try:
+            paid_df = con.execute(
+                """
+                SELECT course_id, COALESCE(SUM(count), 0) AS paid, MAX(payment_method) AS payment_method
+                FROM purchase
+                WHERE student_id = ?
+                GROUP BY course_id
+                """,
+                [student_id],
+            ).fetchdf()
+        except Exception:  # purchase table missing
+            paid_df = pd.DataFrame(columns=["course_id", "paid", "payment_method"])
+
+    paid_by_course = {int(r["course_id"]): int(r["paid"]) for _, r in paid_df.iterrows()}
+    payment_by_course = {int(r["course_id"]): r["payment_method"] for _, r in paid_df.iterrows()}
+
     now = pd.Timestamp.now()
     if not lessons_df.empty:
         lessons_df["lesson_status"] = lessons_df.apply(
@@ -56,16 +74,30 @@ def _query_student_data(student_id: int) -> Dict:
     lessons_status: Dict = {}
     if not lessons_df.empty:
         for course_id, group in lessons_df.groupby("course_id"):
-            course_summary[int(course_id)] = {
+            cid = int(course_id)
+            completed = int((group["lesson_status"] == "completed").sum())
+            uncomplete = int((group["lesson_status"] == "uncomplete").sum())
+            not_yet = int((group["lesson_status"] == "not-yet-complete").sum())
+            paid = paid_by_course.get(cid, 0)
+            # Redefined semantics from the user:
+            #   outstanding = paid - completed (total classes still owed)
+            #   unassigned  = outstanding without a scheduled future lesson
+            outstanding = max(0, paid - completed)
+            unassigned = max(0, outstanding - not_yet)
+            course_summary[cid] = {
                 "course_name": group.iloc[0]["course_name"],
                 "student_id": student_id,
                 "student_name": student_name,
-                "completed": int((group["lesson_status"] == "completed").sum()),
-                "uncomplete": int((group["lesson_status"] == "uncomplete").sum()),
-                "not_yet_complete": int((group["lesson_status"] == "not-yet-complete").sum()),
+                "paid": paid,
+                "completed": completed,
+                "uncomplete": uncomplete,
+                "not_yet_complete": not_yet,
+                "outstanding": outstanding,
+                "unassigned": unassigned,
                 "total": int(len(group)),
+                "payment_method": payment_by_course.get(cid),
             }
-            lessons_status[int(course_id)] = group.to_dict(orient="records")
+            lessons_status[cid] = group.to_dict(orient="records")
 
     return {
         "student": student_df.to_dict(orient="records")[0],

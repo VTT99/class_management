@@ -7,18 +7,113 @@ from app.auth import require_bearer_token
 from app.db import get_conn
 from datetime import datetime, timedelta
 
-from app.models import NewLesson, NewLessonsBulk
+from app.models import ExtendCourse, NewCourse, NewLesson, NewLessonsBulk
 
 router = APIRouter(prefix="", tags=["courses"], dependencies=[Depends(require_bearer_token)])
 
 
-@router.get("/courses", summary="List all courses")
+@router.get("/courses", summary="List all courses with lesson stats")
 def list_courses() -> List[Dict]:
     with get_conn(read_only=True) as con:
         rows = con.execute(
-            "SELECT course_id, course_name, active FROM course ORDER BY course_name"
+            """
+            SELECT c.course_id,
+                   c.course_name,
+                   c.active,
+                   COUNT(l.lesson_id) AS lesson_count,
+                   MIN(l.start_datetime) AS first_lesson,
+                   MAX(l.start_datetime) AS last_lesson
+            FROM course c
+            LEFT JOIN lesson l ON l.course_id = c.course_id
+            GROUP BY c.course_id, c.course_name, c.active
+            ORDER BY c.course_name
+            """
         ).fetchall()
-    return [{"course_id": r[0], "course_name": r[1], "active": bool(r[2])} for r in rows]
+    return [
+        {
+            "course_id": r[0],
+            "course_name": r[1],
+            "active": bool(r[2]),
+            "lesson_count": int(r[3]),
+            "first_lesson": r[4],
+            "last_lesson": r[5],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/add_course", summary="Create a new course", status_code=201)
+def add_course(req: NewCourse) -> Dict:
+    with get_conn(read_only=False) as con:
+        row = con.execute("SELECT MAX(course_id) FROM course").fetchone()
+        new_id = (row[0] if row and row[0] is not None else 0) + 1
+        con.execute(
+            "INSERT INTO course (course_id, course_name, active) VALUES (?, ?, ?)",
+            [new_id, req.course_name, req.active],
+        )
+    return {"message": "Course created.", "course_id": new_id, "course_name": req.course_name, "active": req.active}
+
+
+@router.post("/extend_course", summary="Add N more weekly occurrences after the last existing one(s)")
+def extend_course(req: ExtendCourse) -> Dict:
+    """Detect every (weekday, start_time, end_time) pattern that this course
+    has lessons for, and append `weeks` more occurrences after the latest
+    occurrence of each pattern."""
+    with get_conn(read_only=False) as con:
+        if not con.execute("SELECT 1 FROM course WHERE course_id = ?", [req.course_id]).fetchone():
+            raise HTTPException(404, detail=f"Course {req.course_id} not found.")
+
+        # For each (weekday, start_time, end_time) slot, find the latest occurrence.
+        patterns = con.execute(
+            """
+            SELECT
+                strftime(strptime(start_datetime, '%Y-%m-%d %H:%M:%S'), '%A') AS weekday,
+                strftime(strptime(start_datetime, '%Y-%m-%d %H:%M:%S'), '%H:%M:%S') AS start_t,
+                strftime(strptime(end_datetime,   '%Y-%m-%d %H:%M:%S'), '%H:%M:%S') AS end_t,
+                MAX(strptime(start_datetime, '%Y-%m-%d %H:%M:%S')) AS latest_start
+            FROM lesson
+            WHERE course_id = ?
+            GROUP BY weekday, start_t, end_t
+            """,
+            [req.course_id],
+        ).fetchall()
+
+        if not patterns:
+            raise HTTPException(
+                status_code=400,
+                detail="Course has no existing lessons to extrapolate from. Add one lesson first, then extend.",
+            )
+
+        row = con.execute("SELECT MAX(lesson_id) FROM lesson").fetchone()
+        next_id = (row[0] if row and row[0] is not None else 0) + 1
+
+        created = []
+        for weekday, start_t, end_t, latest_start in patterns:
+            # latest_start is a datetime; the patterns return it as a datetime from strptime.
+            latest = latest_start if isinstance(latest_start, datetime) else datetime.strptime(str(latest_start), "%Y-%m-%d %H:%M:%S")
+            for w in range(1, req.weeks + 1):
+                new_start = latest + timedelta(weeks=w)
+                # Recombine date with the original times (strftime'd to HH:MM:SS).
+                new_start_str = f"{new_start.date()} {start_t}"
+                new_end_str = f"{new_start.date()} {end_t}"
+                con.execute(
+                    "INSERT INTO lesson (lesson_id, start_datetime, end_datetime, course_id) VALUES (?, ?, ?, ?)",
+                    [next_id, new_start_str, new_end_str, req.course_id],
+                )
+                created.append({
+                    "lesson_id": next_id,
+                    "start_datetime": new_start_str,
+                    "end_datetime": new_end_str,
+                    "weekday": weekday,
+                })
+                next_id += 1
+
+    return {
+        "message": f"Added {len(created)} lesson(s) across {len(patterns)} weekly slot(s).",
+        "course_id": req.course_id,
+        "patterns_extended": len(patterns),
+        "lessons": created,
+    }
 
 
 @router.get("/lessons", summary="List lessons within a date range, with course names")

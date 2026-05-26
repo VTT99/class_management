@@ -25,6 +25,7 @@ SYNCED_TABLES: List[str] = [
     "lesson",
     "course_registration",
     "attendance",
+    "purchase",  # payment history; created on the fly by ensure_schema()
 ]
 
 
