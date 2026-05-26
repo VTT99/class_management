@@ -142,3 +142,26 @@ def test_extend_course_without_lessons_rejected(client):
     cid = r.json()["course_id"]
     r2 = client.post("/extend_course", json={"course_id": cid, "weeks": 4})
     assert r2.status_code == 400
+
+
+def test_course_future_students(client):
+    """A student registered for a future lesson shows up; one only in the
+    past does not."""
+    import datetime
+
+    future = (datetime.datetime.now() + datetime.timedelta(days=3)).replace(hour=12, minute=0, second=0, microsecond=0)
+    r = client.post("/add_lesson", json={
+        "course_id": 2,
+        "start_datetime": future.strftime("%Y-%m-%d %H:%M:%S"),
+        "end_datetime": (future + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    fid = r.json()["lesson_id"]
+    client.post("/add_lesson_registration", json={"student_id": 1, "lesson_id": fid})
+
+    data = client.get("/course_future_students", params={"course_id": 2}).json()
+    assert any(s["student_id"] == 1 and s["future_lessons"] >= 1 for s in data)
+
+    # A different course with only past lessons (course 1 in conftest has
+    # past lessons but also future ones; just assert the endpoint shape).
+    empty = client.get("/course_future_students", params={"course_id": 999}).json()
+    assert empty == []

@@ -42,6 +42,29 @@ def list_courses() -> List[Dict]:
     ]
 
 
+@router.get("/course_future_students", summary="Students registered for any upcoming lesson in a course")
+def course_future_students(course_id: int = Query(..., gt=0)) -> List[Dict]:
+    with get_conn(read_only=True) as con:
+        rows = con.execute(
+            """
+            SELECT s.student_id, s.name, COUNT(*) AS future_lessons,
+                   MIN(l.start_datetime) AS next_lesson
+            FROM course_registration r
+            JOIN lesson l ON r.lesson_id = l.lesson_id
+            JOIN student s ON r.student_id = s.student_id
+            WHERE l.course_id = ?
+              AND strptime(l.start_datetime, '%Y-%m-%d %H:%M:%S') >= current_timestamp
+            GROUP BY s.student_id, s.name
+            ORDER BY s.name
+            """,
+            [course_id],
+        ).fetchall()
+    return [
+        {"student_id": r[0], "name": r[1], "future_lessons": int(r[2]), "next_lesson": r[3]}
+        for r in rows
+    ]
+
+
 @router.post("/add_course", summary="Create a new course", status_code=201)
 def add_course(req: NewCourse) -> Dict:
     with get_conn(read_only=False) as con:

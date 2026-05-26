@@ -899,20 +899,45 @@ async function renderCourses() {
     shown.forEach((c) => {
         const card = el("div", { class: "course-card" });
         card.append(
-            el("h4", { style: "margin: 0 0 6px; color: var(--primary-dark);" },
-                `${c.course_name}  ·  #${c.course_id}${c.active ? "" : "  (inactive)"}`),
-            el("p", { class: "muted", style: "margin: 0 0 8px;" },
-                `${c.lesson_count} lesson(s)` +
-                (c.first_lesson ? `  ·  first: ${c.first_lesson.slice(0, 10)}` : "") +
-                (c.last_lesson ? `  ·  last: ${c.last_lesson.slice(0, 10)}` : "")),
+            el("h4", { style: "margin: 0 0 8px; color: var(--primary-dark);" },
+                `${c.course_name}${c.active ? "" : "  (inactive)"}`),
         );
         const row = el("div", { class: "form-row", style: "margin-bottom: 0;" });
-        const extendBtn = el("button", { type: "button" }, "Extend recurring…");
-        extendBtn.addEventListener("click", () => openExtendCourseDialog(c));
-        row.append(extendBtn);
-        card.append(row);
+        const studentsBtn = el("button", { type: "button", class: "btn-secondary" }, "Future students");
+        const addBtn = el("button", { type: "button" }, "Add future classes");
+        const studentsPanel = el("div", { class: "future-students", hidden: true });
+        studentsBtn.addEventListener("click", async () => {
+            if (!studentsPanel.hidden) { studentsPanel.hidden = true; return; }
+            await loadFutureStudents(c.course_id, studentsPanel);
+            studentsPanel.hidden = false;
+        });
+        addBtn.addEventListener("click", () => openExtendCourseDialog(c));
+        row.append(studentsBtn, addBtn);
+        card.append(row, studentsPanel);
         list.append(card);
     });
+}
+
+async function loadFutureStudents(courseId, panel) {
+    panel.innerHTML = "";
+    try {
+        const students = await api(`/course_future_students?course_id=${courseId}`);
+        if (!students.length) {
+            panel.append(el("p", { class: "empty-state" }, "No students registered for upcoming classes."));
+            return;
+        }
+        panel.append(el("p", { class: "muted", style: "margin: 8px 0 4px;" },
+            `${students.length} student(s) attending upcoming classes:`));
+        const ul = el("ul", { style: "margin: 0; padding-left: 18px;" });
+        students.forEach((s) => {
+            ul.append(el("li", {},
+                `${s.name} (#${s.student_id}) — ${s.future_lessons} upcoming` +
+                (s.next_lesson ? `, next ${s.next_lesson.slice(0, 16)}` : "")));
+        });
+        panel.append(ul);
+    } catch (e) {
+        toast(e.message, "error");
+    }
 }
 
 $("courseSearchInput").addEventListener("input", renderCourses);

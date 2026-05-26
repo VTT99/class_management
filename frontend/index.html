@@ -127,22 +127,23 @@
         </form>
     </dialog>
 
-    <!-- === Modal: Extend Course === -->
+    <!-- === Modal: Add future classes (extend recurring) === -->
     <dialog id="extendCourseDialog" class="modal">
         <form id="extendCourseForm" method="dialog">
-            <h3>Extend Course</h3>
+            <h3>Add future classes</h3>
             <p class="muted" id="extendCourseSubtitle"></p>
             <p class="muted">
                 Detects each weekly slot the course currently has (weekday + start/end time)
                 and adds the chosen number of more weekly occurrences after the latest one
-                of each.
+                of each. (To add the very first class to a new course, use
+                &ldquo;+ Add Class&rdquo; on the Calendar tab.)
             </p>
             <label>Weeks to add
                 <input type="number" id="extendCourseWeeks" min="1" max="104" value="8">
             </label>
             <div class="modal-actions">
                 <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
-                <button type="submit">Extend</button>
+                <button type="submit">Add classes</button>
             </div>
         </form>
     </dialog>
