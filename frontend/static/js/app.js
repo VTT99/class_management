@@ -11,7 +11,7 @@ const API =
     "";
 const API_TOKEN = (typeof window !== "undefined" && window.API_TOKEN) || "";
 
-// --- tiny helpers ---
+// --- helpers ---
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
     const node = document.createElement(tag);
@@ -67,24 +67,35 @@ function debounce(fn, ms) {
 
 function fmtDate(s) {
     if (!s) return "";
-    const d = new Date(s);
+    const d = new Date(s.replace(" ", "T"));
     if (isNaN(d.getTime())) return s;
     return d.toLocaleString();
 }
 
-// --- tabs ---
+function fmtTime(s) {
+    if (!s) return "";
+    const d = new Date(s.replace(" ", "T"));
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function isoDate(d) {
+    return d.toISOString().slice(0, 10);
+}
+
+// === Tabs ===========================================================
 function showPage(id) {
     document.querySelectorAll(".page").forEach((p) => p.toggleAttribute("hidden", p.id !== id));
     document.querySelectorAll('nav button[data-page]').forEach((b) => {
         b.setAttribute("aria-selected", b.dataset.page === id ? "true" : "false");
     });
+    if (id === "calendarPage") renderCalendar();
 }
 
 document.querySelectorAll('nav button[data-page]').forEach((b) => {
     b.addEventListener("click", () => showPage(b.dataset.page));
 });
 
-// arrow-key nav for tabs
 document.querySelector("nav").addEventListener("keydown", (e) => {
     if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
     const tabs = [...document.querySelectorAll('nav button[data-page]')];
@@ -95,7 +106,7 @@ document.querySelector("nav").addEventListener("keydown", (e) => {
     showPage(next.dataset.page);
 });
 
-// --- health badge ---
+// === Health badge ===================================================
 async function refreshHealth() {
     const badge = $("health-badge");
     try {
@@ -110,7 +121,7 @@ async function refreshHealth() {
     }
 }
 
-// --- student data ---
+// === Student tab ====================================================
 let currentLessons = {};
 let currentSummary = {};
 
@@ -211,6 +222,7 @@ async function downloadCsv(studentId) {
     }
 }
 
+// --- student search (debounced) ---
 const searchStudents = debounce(async () => {
     const q = $("studentSearchInput").value.trim();
     const out = $("studentSearchResults");
@@ -243,7 +255,6 @@ $("studentSearchInput").addEventListener("keydown", (e) => {
     e.preventDefault();
     const v = $("studentSearchInput").value.trim();
     if (/^\d+$/.test(v)) {
-        // Pure number — jump straight to that ID.
         $("studentSearchResults").innerHTML = "";
         fetchStudentData(v);
     } else {
@@ -251,8 +262,11 @@ $("studentSearchInput").addEventListener("keydown", (e) => {
     }
 });
 
-// --- add student ---
+// --- Add Student modal ---
+$("openAddStudentBtn").addEventListener("click", () => $("addStudentDialog").showModal());
+
 $("addStudentForm").addEventListener("submit", async (e) => {
+    // Prevent the dialog's default "close" submit so we can show errors.
     e.preventDefault();
     const form = e.currentTarget;
     const fd = new FormData(form);
@@ -263,153 +277,257 @@ $("addStudentForm").addEventListener("submit", async (e) => {
         const result = await withLoading(btn, () => api("/add_student", { method: "POST", body }));
         toast(`Added student #${result.student_id}`, "success");
         form.reset();
+        $("addStudentDialog").close();
     } catch (err) {
         toast(err.message, "error");
     }
 });
 
-// --- course search (debounced) ---
-const searchCourses = debounce(async () => {
-    const q = $("courseSearchInput").value.trim();
-    const out = $("courseResults");
-    out.innerHTML = "";
-    if (q.length < 2) return;
+// === Calendar tab ===================================================
+let calendarStart = startOfDay(new Date());
+
+function startOfDay(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+
+function addDays(d, n) {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+}
+
+async function renderCalendar() {
+    const grid = $("calendarGrid");
+    grid.innerHTML = "";
+    const start = startOfDay(calendarStart);
+    const end = addDays(start, 6);
+    $("calendarRangeLabel").textContent =
+        `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+
+    let lessons = [];
     try {
-        const courses = await api(`/search_courses?course_name_partial=${encodeURIComponent(q)}`);
-        if (!courses.length) {
-            out.append(el("p", { class: "empty-state" }, "No matching courses."));
+        lessons = await api(`/lessons?start_date=${isoDate(start)}&end_date=${isoDate(end)}`);
+    } catch (e) {
+        toast(`Failed to load calendar: ${e.message}`, "error");
+        return;
+    }
+
+    const byDay = new Map();
+    for (let i = 0; i < 7; i++) {
+        byDay.set(isoDate(addDays(start, i)), []);
+    }
+    lessons.forEach((l) => {
+        const day = (l.start_datetime || "").slice(0, 10);
+        if (byDay.has(day)) byDay.get(day).push(l);
+    });
+
+    const today = isoDate(startOfDay(new Date()));
+    for (let i = 0; i < 7; i++) {
+        const day = addDays(start, i);
+        const key = isoDate(day);
+        const isToday = key === today;
+        const col = el("div", { class: "calendar-day" + (isToday ? " is-today" : "") });
+        col.append(el("div", { class: "calendar-day-header" },
+            day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })));
+
+        const body = el("div", { class: "calendar-day-body" });
+        const lessonsToday = byDay.get(key) || [];
+        if (!lessonsToday.length) {
+            body.append(el("p", { class: "empty-state", style: "font-size:12px;margin:0;" }, "—"));
+        } else {
+            lessonsToday.forEach((l) => {
+                const pill = el("button", { type: "button", class: "lesson-pill", title: `Lesson #${l.lesson_id}` });
+                pill.append(
+                    el("span", { class: "lesson-pill-time" }, `${fmtTime(l.start_datetime)}–${fmtTime(l.end_datetime)}`),
+                    el("span", { class: "lesson-pill-name" }, l.course_name),
+                );
+                pill.addEventListener("click", () => openLessonDialog(l));
+                body.append(pill);
+            });
+        }
+        col.append(body);
+        grid.append(col);
+    }
+}
+
+$("calendarPrevBtn").addEventListener("click", () => {
+    calendarStart = addDays(calendarStart, -7);
+    renderCalendar();
+});
+$("calendarNextBtn").addEventListener("click", () => {
+    calendarStart = addDays(calendarStart, 7);
+    renderCalendar();
+});
+$("calendarTodayBtn").addEventListener("click", () => {
+    calendarStart = startOfDay(new Date());
+    renderCalendar();
+});
+
+// --- Lesson dialog ---
+let currentLesson = null;
+
+async function openLessonDialog(lesson) {
+    currentLesson = lesson;
+    $("lessonDialogTitle").textContent = `${lesson.course_name} — Lesson #${lesson.lesson_id}`;
+    $("lessonDialogSubtitle").textContent = `${fmtDate(lesson.start_datetime)} → ${fmtDate(lesson.end_datetime)}`;
+    $("lessonAddStudentInput").value = "";
+    $("lessonAddStudentResults").innerHTML = "";
+    await refreshLessonParticipants(lesson.lesson_id);
+    $("lessonDialog").showModal();
+}
+
+async function refreshLessonParticipants(lessonId) {
+    const wrap = $("lessonParticipants");
+    wrap.innerHTML = "";
+    let participants = [];
+    try {
+        participants = await api(`/lesson_participants?lesson_id=${lessonId}`);
+    } catch (e) {
+        if (e.message.includes("No participants")) {
+            wrap.append(el("p", { class: "empty-state" }, "No students registered yet."));
             return;
         }
-        courses.forEach((c) => {
-            const card = el("div", { class: "course-card" },
-                el("strong", {}, `${c.course_name}  ·  course #${c.course_id}`),
-                el("p", {}, "Upcoming start times: " + (c.available_start_times.join(", ") || "—")),
-            );
-            const btn = el("button", { type: "button" }, "Select");
-            btn.addEventListener("click", () => selectCourse(c));
-            card.append(btn);
-            out.append(card);
+        toast(e.message, "error");
+        return;
+    }
+    participants.forEach((p) => {
+        const lab = el("label", {});
+        lab.append(
+            el("input", { type: "checkbox", value: p.student_id, name: "student" }),
+            ` ${p.name} (#${p.student_id})`,
+        );
+        wrap.append(lab);
+    });
+}
+
+$("markAllAttendedBtn").addEventListener("click", async (e) => {
+    if (!currentLesson) return;
+    const ids = [...$("lessonParticipants").querySelectorAll('input[name="student"]:checked')]
+        .map((c) => parseInt(c.value, 10));
+    if (!ids.length) return toast("Select at least one student", "warn");
+    try {
+        const r = await withLoading(e.currentTarget, () => api("/mark_attendance_bulk", {
+            method: "POST",
+            body: { lesson_id: currentLesson.lesson_id, student_ids: ids },
+        }));
+        const errs = r.errors?.length || 0;
+        toast(`Marked ${r.marked_count} attended${errs ? `, ${errs} failed` : ""}`,
+            errs ? "warn" : "success");
+        $("lessonParticipants").querySelectorAll("label").forEach((lab) => {
+            const cb = lab.querySelector('input');
+            if (cb && cb.checked) lab.classList.add("is-attended");
+        });
+    } catch (err) {
+        toast(err.message, "error");
+    }
+});
+
+const searchStudentsForLesson = debounce(async () => {
+    const q = $("lessonAddStudentInput").value.trim();
+    const out = $("lessonAddStudentResults");
+    out.innerHTML = "";
+    if (q.length < 1) return;
+    try {
+        const matches = await api(`/search_students?q=${encodeURIComponent(q)}`);
+        if (!matches.length) {
+            out.append(el("p", { class: "empty-state" }, "No matching students."));
+            return;
+        }
+        matches.forEach((m) => {
+            const row = el("div", { class: "student-card" });
+            const btn = el("button", { type: "button" }, `#${m.student_id} — ${m.name}  ·  Add`);
+            btn.addEventListener("click", async () => {
+                btn.disabled = true;
+                try {
+                    await api("/add_lesson_registration", {
+                        method: "POST",
+                        body: { student_id: m.student_id, lesson_id: currentLesson.lesson_id },
+                    });
+                    toast(`Added ${m.name} to this class`, "success");
+                    $("lessonAddStudentInput").value = "";
+                    out.innerHTML = "";
+                    await refreshLessonParticipants(currentLesson.lesson_id);
+                } catch (err) {
+                    btn.disabled = false;
+                    toast(err.message, "error");
+                }
+            });
+            row.append(btn);
+            out.append(row);
         });
     } catch (e) {
         toast(e.message, "error");
     }
 }, 300);
 
-function selectCourse(c) {
-    $("selectedCourseId").value = c.course_id;
-    $("selectedCourseName").textContent = c.course_name;
-    const sel = $("startTime");
+$("lessonAddStudentInput").addEventListener("input", searchStudentsForLesson);
+
+// --- Add Class modal ---
+async function populateCourseSelect() {
+    const sel = $("addClassCourseSelect");
     sel.innerHTML = "";
-    (c.available_start_times.length ? c.available_start_times : ["09:00"]).forEach((t) => {
-        sel.append(el("option", { value: t }, t));
-    });
-    $("registrationForm").hidden = false;
-    $("registrationForm").scrollIntoView({ behavior: "smooth" });
+    try {
+        const courses = await api("/courses");
+        const active = courses.filter((c) => c.active);
+        const list = active.length ? active : courses;
+        list.forEach((c) => sel.append(el("option", { value: c.course_id }, c.course_name)));
+    } catch (e) {
+        toast(`Couldn't load courses: ${e.message}`, "error");
+    }
 }
 
-$("courseSearchInput").addEventListener("input", searchCourses);
-
-$("registerBtn").addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    const body = {
-        student_id: parseInt($("registrationStudentId").value, 10),
-        course_id: parseInt($("selectedCourseId").value, 10),
-        day_of_week: $("dayOfWeek").value,
-        start_time: $("startTime").value,
-        number_of_lessons: parseInt($("numberOfLessons").value, 10),
-        first_lesson_date: $("firstLessonDate").value || null,
-    };
-    if (!body.student_id || !body.course_id || !body.number_of_lessons) {
-        return toast("Fill in student ID, course, and # of lessons", "warn");
-    }
-    try {
-        const r = await withLoading(btn, () => api("/register_lessons", { method: "POST", body }));
-        toast(`Registered ${r.registered_lessons_count} lesson(s).`, "success");
-        $("registrationForm").hidden = true;
-        $("courseResults").innerHTML = "";
-        $("courseSearchInput").value = "";
-    } catch (e) {
-        toast(e.message, "error");
-    }
+$("openAddClassBtn").addEventListener("click", async () => {
+    await populateCourseSelect();
+    $("addClassDate").value = isoDate(new Date());
+    $("addClassStart").value = "09:00";
+    $("addClassEnd").value = "10:00";
+    $("addClassDialog").showModal();
 });
 
-// --- attendance ---
-$("fetchParticipantsBtn").addEventListener("click", async (e) => {
-    const lessonId = parseInt($("attendanceLessonId").value, 10);
-    if (!lessonId) return toast("Enter a lesson ID", "warn");
-    const list = $("participantsList");
-    list.innerHTML = "";
-    $("attendanceForm").hidden = true;
-    try {
-        const participants = await withLoading(e.currentTarget, () => api(`/lesson_participants?lesson_id=${lessonId}`));
-        if (!participants.length) {
-            list.append(el("p", { class: "empty-state" }, "No participants registered."));
-            return;
-        }
-        participants.forEach((p) => {
-            list.append(el("label", {},
-                el("input", { type: "checkbox", value: p.student_id, name: "student" }),
-                ` ${p.name} (ID: ${p.student_id})`,
-            ));
-        });
-        $("attendanceForm").hidden = false;
-    } catch (err) {
-        toast(err.message, "error");
-    }
-});
-
-$("attendanceForm").addEventListener("submit", async (e) => {
+$("addClassForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const lessonId = parseInt($("attendanceLessonId").value, 10);
-    const ids = [...e.currentTarget.querySelectorAll('input[name="student"]:checked')].map((c) => parseInt(c.value, 10));
-    if (!ids.length) return toast("Select at least one student", "warn");
+    const courseId = parseInt($("addClassCourseSelect").value, 10);
+    const day = $("addClassDate").value;
+    const start = $("addClassStart").value;
+    const end = $("addClassEnd").value;
+    if (!courseId || !day || !start || !end) return toast("Fill in all fields", "warn");
+
+    const body = {
+        course_id: courseId,
+        start_datetime: `${day} ${start}:00`,
+        end_datetime: `${day} ${end}:00`,
+    };
     const btn = e.currentTarget.querySelector("button[type=submit]");
     try {
-        const r = await withLoading(btn, () => api("/mark_attendance_bulk", {
-            method: "POST",
-            body: { lesson_id: lessonId, student_ids: ids },
-        }));
-        $("attendanceResult").innerHTML = "";
-        $("attendanceResult").append(
-            el("p", {}, `Marked ${r.marked_count} attended.`),
-        );
-        if (r.errors && r.errors.length) {
-            const ul = el("ul");
-            r.errors.forEach((err) => ul.append(el("li", {}, `Student ${err.student_id}: ${err.detail}`)));
-            $("attendanceResult").append(ul);
-            toast(`${r.errors.length} failures`, "warn");
-        } else {
-            toast(`Attendance marked for ${r.marked_count} student(s)`, "success");
-        }
+        const r = await withLoading(btn, () => api("/add_lesson", { method: "POST", body }));
+        toast(`Created lesson #${r.lesson_id}`, "success");
+        $("addClassDialog").close();
+        renderCalendar();
     } catch (err) {
         toast(err.message, "error");
     }
 });
 
-// --- calendar ---
-async function runCalendar(path, btn) {
-    const months = parseInt($("monthsAhead").value, 10);
-    if (!months || months < 1) return toast("Enter months ahead (≥1)", "warn");
+// --- Sync Google Calendar ---
+$("syncCalendarBtn").addEventListener("click", async (e) => {
+    if (!confirm("Sync the next 1 month of lessons to Google Calendar?")) return;
     try {
-        const r = await withLoading(btn, () => api(path, { method: "POST", body: { months_ahead: months } }));
-        $("calendarResult").innerHTML = "";
-        $("calendarResult").append(el("p", {}, r.message));
-        if (r.events && r.events.length) {
-            const ul = el("ul");
-            r.events.forEach((ev) => ul.append(el("li", {}, `${ev.summary} — ${fmtDate(ev.start)}`)));
-            $("calendarResult").append(ul);
-        }
+        const r = await withLoading(e.currentTarget, () => api("/sync_calendar_events", {
+            method: "POST",
+            body: { months_ahead: 1 },
+        }));
         toast(r.message, "success");
-    } catch (e) {
-        toast(e.message, "error");
+    } catch (err) {
+        toast(err.message, "error");
     }
-}
-
-$("syncCalendarBtn").addEventListener("click", (e) => runCalendar("/sync_calendar_events", e.currentTarget));
-$("regenerateCalendarBtn").addEventListener("click", (e) => {
-    if (!confirm("This deletes ALL events in the calendar within the window and recreates them. Continue?")) return;
-    runCalendar("/generate_calendar_events", e.currentTarget);
 });
 
-// init
+// --- Generic modal close handler (any button with data-close-modal) ---
+document.querySelectorAll("[data-close-modal]").forEach((btn) => {
+    btn.addEventListener("click", () => btn.closest("dialog")?.close());
+});
+
+// === init ===========================================================
 refreshHealth();

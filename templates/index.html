@@ -14,19 +14,18 @@
         </header>
 
         <nav role="tablist" aria-label="Sections">
-            <button type="button" role="tab" data-page="studentData" aria-selected="true">Student Data</button>
-            <button type="button" role="tab" data-page="addStudent" aria-selected="false">Add Student</button>
-            <button type="button" role="tab" data-page="registerLessons" aria-selected="false">Register</button>
-            <button type="button" role="tab" data-page="markAttendance" aria-selected="false">Attendance</button>
-            <button type="button" role="tab" data-page="generateCalendar" aria-selected="false">Calendar</button>
+            <button type="button" role="tab" data-page="studentPage" aria-selected="true">Student</button>
+            <button type="button" role="tab" data-page="calendarPage" aria-selected="false">Calendar</button>
         </nav>
 
-        <!-- Student Data -->
-        <section id="studentData" class="page active" role="tabpanel">
-            <h2>Student Data</h2>
-            <div class="form-row">
-                <input type="text" id="studentSearchInput" placeholder="Search by ID or name..." autocomplete="off" required>
-                <a id="csvExportLink" class="link hidden" href="#" download>Export CSV</a>
+        <!-- === Student tab === -->
+        <section id="studentPage" class="page active" role="tabpanel">
+            <div class="form-row" style="justify-content: space-between;">
+                <div class="form-row" style="flex: 1; min-width: 240px;">
+                    <input type="text" id="studentSearchInput" placeholder="Search by ID or name..." autocomplete="off" style="flex: 1;">
+                    <a id="csvExportLink" class="link hidden" href="#" download>Export CSV</a>
+                </div>
+                <button type="button" id="openAddStudentBtn">+ Add Student</button>
             </div>
             <div id="studentSearchResults" class="result-block"></div>
             <div id="studentInfo" class="result-block"></div>
@@ -34,76 +33,90 @@
             <div id="lessonDetails"></div>
         </section>
 
-        <!-- Add Student -->
-        <section id="addStudent" class="page" role="tabpanel" hidden>
-            <h2>Add New Student</h2>
-            <form id="addStudentForm">
-                <label>Name<input type="text" name="name" required maxlength="200"></label>
-                <label>Parent contact<input type="text" name="parent_contact" required maxlength="200"></label>
-                <label>Gender
-                    <select name="gender" required>
-                        <option value="F">Female</option>
-                        <option value="M">Male</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </label>
-                <label>Payment method<input type="text" name="payment_method" required></label>
-                <label>Referee (optional)<input type="text" name="referee"></label>
-                <button type="submit">Add Student</button>
-            </form>
-        </section>
-
-        <!-- Register Lessons -->
-        <section id="registerLessons" class="page" role="tabpanel" hidden>
-            <h2>Register for Lessons</h2>
-            <label>Search course
-                <input type="text" id="courseSearchInput" placeholder="Start typing a course name..." autocomplete="off">
-            </label>
-            <div id="courseResults" class="result-block"></div>
-
-            <div id="registrationForm" hidden>
-                <h3>Register for <span id="selectedCourseName"></span></h3>
-                <input type="hidden" id="selectedCourseId">
-                <label>Student ID<input type="number" id="registrationStudentId" min="1" required></label>
-                <label>Day of week
-                    <select id="dayOfWeek" required>
-                        <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
-                        <option>Thursday</option><option>Friday</option>
-                        <option>Saturday</option><option>Sunday</option>
-                    </select>
-                </label>
-                <label>Start time<select id="startTime" required></select></label>
-                <label>Number of lessons<input type="number" id="numberOfLessons" min="1" max="200" value="10" required></label>
-                <label>First lesson date<input type="date" id="firstLessonDate"></label>
-                <button type="button" id="registerBtn">Register</button>
+        <!-- === Calendar tab === -->
+        <section id="calendarPage" class="page" role="tabpanel" hidden>
+            <div class="form-row" style="justify-content: space-between;">
+                <div class="form-row">
+                    <button type="button" id="calendarPrevBtn" class="btn-secondary">◀ Previous week</button>
+                    <span id="calendarRangeLabel"></span>
+                    <button type="button" id="calendarNextBtn" class="btn-secondary">Next week ▶</button>
+                    <button type="button" id="calendarTodayBtn" class="btn-secondary">Today</button>
+                </div>
+                <div class="form-row">
+                    <button type="button" id="openAddClassBtn">+ Add Class</button>
+                    <button type="button" id="syncCalendarBtn" class="btn-secondary" title="Push lessons to Google Calendar">Sync Google Calendar</button>
+                </div>
             </div>
-        </section>
-
-        <!-- Mark Attendance -->
-        <section id="markAttendance" class="page" role="tabpanel" hidden>
-            <h2>Mark Attendance</h2>
-            <div class="form-row">
-                <input type="number" id="attendanceLessonId" min="1" placeholder="Lesson ID" required>
-                <button type="button" id="fetchParticipantsBtn">Get Participants</button>
-            </div>
-            <form id="attendanceForm" hidden>
-                <div id="participantsList"></div>
-                <button type="submit">Mark Selected as Attended</button>
-            </form>
-            <div id="attendanceResult" class="result-block"></div>
-        </section>
-
-        <!-- Calendar -->
-        <section id="generateCalendar" class="page" role="tabpanel" hidden>
-            <h2>Calendar Events</h2>
-            <label>Months ahead<input type="number" id="monthsAhead" min="1" max="24" value="1"></label>
-            <div class="form-row">
-                <button type="button" id="syncCalendarBtn">Sync (recommended)</button>
-                <button type="button" id="regenerateCalendarBtn" class="btn-secondary">Wipe &amp; recreate</button>
-            </div>
-            <div id="calendarResult" class="result-block"></div>
+            <div id="calendarGrid" class="calendar-grid"></div>
         </section>
     </div>
+
+    <!-- === Modal: Add Student === -->
+    <dialog id="addStudentDialog" class="modal">
+        <form id="addStudentForm" method="dialog">
+            <h3>Add New Student</h3>
+            <label>Name<input type="text" name="name" required maxlength="200"></label>
+            <label>Parent contact<input type="text" name="parent_contact" required maxlength="200"></label>
+            <label>Gender
+                <select name="gender" required>
+                    <option value="F">Female</option>
+                    <option value="M">Male</option>
+                    <option value="Other">Other</option>
+                </select>
+            </label>
+            <label>Payment method<input type="text" name="payment_method" required></label>
+            <label>Referee (optional)<input type="text" name="referee"></label>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
+                <button type="submit">Add Student</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- === Modal: Add Class (lesson) === -->
+    <dialog id="addClassDialog" class="modal">
+        <form id="addClassForm" method="dialog">
+            <h3>Add Class</h3>
+            <label>Course
+                <select id="addClassCourseSelect" name="course_id" required></select>
+            </label>
+            <label>Date<input type="date" id="addClassDate" required></label>
+            <div class="form-row">
+                <label style="flex: 1;">Start time<input type="time" id="addClassStart" required></label>
+                <label style="flex: 1;">End time<input type="time" id="addClassEnd" required></label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
+                <button type="submit">Create</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- === Modal: Lesson details (attendance + add student) === -->
+    <dialog id="lessonDialog" class="modal modal-wide">
+        <h3 id="lessonDialogTitle">Lesson</h3>
+        <p id="lessonDialogSubtitle" class="muted"></p>
+
+        <h4>Participants</h4>
+        <div id="lessonParticipants" class="participant-list">
+            <p class="empty-state">No students registered yet.</p>
+        </div>
+        <div class="form-row">
+            <button type="button" id="markAllAttendedBtn">Mark selected as attended</button>
+        </div>
+
+        <hr>
+
+        <h4>Add student to this class</h4>
+        <div class="form-row">
+            <input type="text" id="lessonAddStudentInput" placeholder="Search students by ID or name..." autocomplete="off" style="flex: 1;">
+        </div>
+        <div id="lessonAddStudentResults" class="result-block"></div>
+
+        <div class="modal-actions" style="margin-top: 16px;">
+            <button type="button" class="btn-secondary" data-close-modal>Close</button>
+        </div>
+    </dialog>
 
     <div id="toast-stack" aria-live="polite"></div>
 

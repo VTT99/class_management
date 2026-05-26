@@ -63,3 +63,14 @@ class LessonParticipation(BaseModel):
 
 class CalendarGenerationRequest(BaseModel):
     months_ahead: int = Field(..., gt=0, le=24)
+
+
+class NewLesson(BaseModel):
+    course_id: int = Field(..., gt=0)
+    start_datetime: str = Field(..., description="YYYY-MM-DD HH:MM:SS")
+    end_datetime: str = Field(..., description="YYYY-MM-DD HH:MM:SS")
+
+
+class SingleRegistration(BaseModel):
+    student_id: int = Field(..., gt=0)
+    lesson_id: int = Field(..., gt=0)

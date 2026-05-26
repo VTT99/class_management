@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_bearer_token
 from app.db import get_conn
-from app.models import NewRegistration
+from app.models import NewRegistration, SingleRegistration
 
 router = APIRouter(prefix="", tags=["registration"], dependencies=[Depends(require_bearer_token)])
 
@@ -99,4 +99,38 @@ def register_lessons(reg: NewRegistration) -> Dict:
         "course_id": reg.course_id,
         "registered_lessons_count": len(registered),
         "lessons": registered,
+    }
+
+
+@router.post("/add_lesson_registration", summary="Register a single student to a single specific lesson")
+def add_lesson_registration(reg: SingleRegistration) -> Dict:
+    with get_conn(read_only=False) as con:
+        if not con.execute("SELECT 1 FROM student WHERE student_id = ?", [reg.student_id]).fetchone():
+            raise HTTPException(404, detail=f"Student {reg.student_id} not found.")
+
+        lesson_row = con.execute(
+            "SELECT course_id FROM lesson WHERE lesson_id = ?", [reg.lesson_id]
+        ).fetchone()
+        if not lesson_row:
+            raise HTTPException(404, detail=f"Lesson {reg.lesson_id} not found.")
+        course_id = lesson_row[0]
+
+        # Idempotent: re-registering is a no-op.
+        already = con.execute(
+            "SELECT 1 FROM course_registration WHERE student_id = ? AND lesson_id = ?",
+            [reg.student_id, reg.lesson_id],
+        ).fetchone()
+        if already:
+            return {
+                "message": "Already registered (no-op).",
+                "student_id": reg.student_id,
+                "lesson_id": reg.lesson_id,
+            }
+
+        _insert_registration(con, reg.student_id, reg.lesson_id, course_id)
+
+    return {
+        "message": "Student registered for lesson.",
+        "student_id": reg.student_id,
+        "lesson_id": reg.lesson_id,
     }
