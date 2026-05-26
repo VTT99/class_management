@@ -31,5 +31,4 @@ exec .venv/bin/uvicorn app.main:app \
     --uds "$SOCKET" \
     --root-path "${ROOT_PATH:-}" \
     --proxy-headers --forwarded-allow-ips='*' \
-    --log-config /dev/null \
     --log-level info
