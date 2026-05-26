@@ -39,8 +39,8 @@
             <div class="form-row" style="justify-content: space-between;">
                 <div class="form-row">
                     <div class="view-toggle" role="group" aria-label="Calendar view">
-                        <button type="button" data-view="week" class="active">Week</button>
-                        <button type="button" data-view="month">Month</button>
+                        <button type="button" data-view="month" class="active">Month</button>
+                        <button type="button" data-view="week">Week</button>
                     </div>
                     <button type="button" id="calendarPrevBtn" class="btn-secondary">◀</button>
                     <span id="calendarRangeLabel"></span>
@@ -49,8 +49,8 @@
                 </div>
                 <button type="button" id="openAddClassBtn">+ Add Class</button>
             </div>
-            <div id="calendarWeekGrid" class="week-grid"></div>
-            <div id="calendarMonthGrid" class="month-grid" hidden></div>
+            <div id="calendarWeekGrid" class="week-grid" hidden></div>
+            <div id="calendarMonthGrid" class="month-grid"></div>
         </section>
 
         <!-- === Utility tab === -->
@@ -158,12 +158,12 @@
         <div id="lessonParticipants" class="participant-list">
             <p class="empty-state">No students registered yet.</p>
         </div>
-        <div class="form-row">
+        <label class="inline-check" style="margin: 6px 0 10px;">
+            <input type="checkbox" id="pushAbsentCheck" checked>
+            Push absentees to the next class in this course
+        </label>
+        <div class="form-row" style="margin-bottom: 0;">
             <button type="button" id="markAllAttendedBtn">Mark selected as attended</button>
-            <label class="inline-check" style="margin: 0;">
-                <input type="checkbox" id="pushAbsentCheck" checked>
-                Push absentees to next class
-            </label>
         </div>
         <div id="pushedReport" class="result-block" hidden></div>
 

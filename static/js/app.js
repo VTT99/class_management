@@ -284,7 +284,7 @@ $("addStudentForm").addEventListener("submit", async (e) => {
 });
 
 // === Calendar tab ===================================================
-let calendarView = "week"; // "week" or "month"
+let calendarView = "month"; // "month" or "week"
 let calendarAnchor = startOfDay(new Date()); // For week: start of view (Mon-aligned). For month: any day in shown month.
 
 function startOfDay(d) {

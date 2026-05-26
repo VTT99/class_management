@@ -529,9 +529,15 @@ tbody tr:nth-child(even) { background: #fafbfc; }
 
 .participant-list {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px 12px;
+    grid-template-columns: 1fr;
+    gap: 4px;
     margin-bottom: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    background: #fafbfc;
 }
 
 .participant-list label {
@@ -539,9 +545,17 @@ tbody tr:nth-child(even) { background: #fafbfc; }
     color: var(--text);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     font-size: 14px;
+    padding: 3px 0;
 }
+
+.participant-list label input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: auto;
+}
+
+.participant-list .empty-state { margin: 4px 0; }
 
 .participant-list label.is-attended {
     color: var(--success);
