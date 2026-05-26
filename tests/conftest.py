@@ -55,6 +55,7 @@ def tmp_db(tmp_path: Path) -> Path:
     con.execute("INSERT INTO student VALUES (1, 'Alice', 'alice@x', 'F', '2025-01-01', 'web', 'Cash')")
     con.execute("INSERT INTO student VALUES (2, 'Bob',   'bob@x',   'M', '2025-01-01', NULL,  'Cash')")
     con.execute("INSERT INTO course VALUES (1, 'Math class', TRUE)")
+    con.execute("INSERT INTO course VALUES (2, 'Art class',  TRUE)")
 
     next_month = pd.Timestamp.now() + pd.Timedelta(days=14)
     yesterday = pd.Timestamp.now() - pd.Timedelta(days=1)

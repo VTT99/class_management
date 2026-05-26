@@ -284,28 +284,87 @@ $("addStudentForm").addEventListener("submit", async (e) => {
 });
 
 // === Calendar tab ===================================================
-let calendarStart = startOfDay(new Date());
+let calendarView = "week"; // "week" or "month"
+let calendarAnchor = startOfDay(new Date()); // For week: start of view (Mon-aligned). For month: any day in shown month.
 
 function startOfDay(d) {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
     return x;
 }
-
 function addDays(d, n) {
     const x = new Date(d);
     x.setDate(x.getDate() + n);
     return x;
 }
+function startOfWeek(d) {
+    // Monday-start (UK convention). 0=Sun..6=Sat. Adjust to 1=Mon..7=Sun.
+    const x = startOfDay(d);
+    const dow = (x.getDay() + 6) % 7; // 0=Mon..6=Sun
+    x.setDate(x.getDate() - dow);
+    return x;
+}
+function startOfMonth(d) {
+    const x = new Date(d.getFullYear(), d.getMonth(), 1);
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+function endOfMonth(d) {
+    const x = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    x.setHours(23, 59, 59, 0);
+    return x;
+}
 
 async function renderCalendar() {
-    const grid = $("calendarGrid");
+    if (calendarView === "week") return renderWeek();
+    return renderMonth();
+}
+
+async function renderWeek() {
+    const grid = $("calendarWeekGrid");
+    const monthGrid = $("calendarMonthGrid");
+    grid.hidden = false;
+    monthGrid.hidden = true;
     grid.innerHTML = "";
-    const start = startOfDay(calendarStart);
+
+    // Anchor the week on the user's currently-shown range
+    // (calendarAnchor stays the same when navigating prev/next).
+    const start = startOfWeek(calendarAnchor);
     const end = addDays(start, 6);
     $("calendarRangeLabel").textContent =
         `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
 
+    // Build header row
+    grid.append(el("div", { class: "week-grid-corner" }));
+    const today = isoDate(startOfDay(new Date()));
+    const dayDates = [];
+    for (let i = 0; i < 7; i++) {
+        const day = addDays(start, i);
+        dayDates.push(day);
+        const isToday = isoDate(day) === today;
+        grid.append(el("div", {
+            class: "week-grid-day-header" + (isToday ? " is-today" : ""),
+            style: `grid-column: ${i + 2};`,
+        }, day.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })));
+    }
+
+    // Build time column + grid cells (rows for 8..21 inclusive => 14 rows).
+    const HOUR_START = 8, HOUR_END = 21;
+    for (let h = HOUR_START; h <= HOUR_END; h++) {
+        const row = h - HOUR_START + 2; // +1 for header, +1 because grid is 1-indexed
+        grid.append(el("div", { class: "week-grid-time", style: `grid-row: ${row};` },
+            `${String(h).padStart(2, "0")}:00`));
+        for (let i = 0; i < 7; i++) {
+            const isToday = isoDate(dayDates[i]) === today;
+            grid.append(el("div", {
+                class: "week-grid-cell" + (isToday ? " is-today" : ""),
+                style: `grid-row: ${row}; grid-column: ${i + 2};`,
+                dataset: { day: isoDate(dayDates[i]), hour: h },
+            }));
+        }
+    }
+
+    // Fetch + place lessons
     let lessons = [];
     try {
         lessons = await api(`/lessons?start_date=${isoDate(start)}&end_date=${isoDate(end)}`);
@@ -313,55 +372,132 @@ async function renderCalendar() {
         toast(`Failed to load calendar: ${e.message}`, "error");
         return;
     }
-
-    const byDay = new Map();
-    for (let i = 0; i < 7; i++) {
-        byDay.set(isoDate(addDays(start, i)), []);
-    }
-    lessons.forEach((l) => {
-        const day = (l.start_datetime || "").slice(0, 10);
-        if (byDay.has(day)) byDay.get(day).push(l);
-    });
-
-    const today = isoDate(startOfDay(new Date()));
-    for (let i = 0; i < 7; i++) {
-        const day = addDays(start, i);
-        const key = isoDate(day);
-        const isToday = key === today;
-        const col = el("div", { class: "calendar-day" + (isToday ? " is-today" : "") });
-        col.append(el("div", { class: "calendar-day-header" },
-            day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })));
-
-        const body = el("div", { class: "calendar-day-body" });
-        const lessonsToday = byDay.get(key) || [];
-        if (!lessonsToday.length) {
-            body.append(el("p", { class: "empty-state", style: "font-size:12px;margin:0;" }, "—"));
-        } else {
-            lessonsToday.forEach((l) => {
-                const pill = el("button", { type: "button", class: "lesson-pill", title: `Lesson #${l.lesson_id}` });
-                pill.append(
-                    el("span", { class: "lesson-pill-time" }, `${fmtTime(l.start_datetime)}–${fmtTime(l.end_datetime)}`),
-                    el("span", { class: "lesson-pill-name" }, l.course_name),
-                );
-                pill.addEventListener("click", () => openLessonDialog(l));
-                body.append(pill);
-            });
-        }
-        col.append(body);
-        grid.append(col);
-    }
+    lessons.forEach((l) => placeLessonInWeek(grid, l));
 }
 
+function placeLessonInWeek(grid, lesson) {
+    const dt = new Date((lesson.start_datetime || "").replace(" ", "T"));
+    if (isNaN(dt.getTime())) return;
+    const dayIso = isoDate(dt);
+    let hour = dt.getHours();
+    if (hour < 8) hour = 8;
+    if (hour > 21) hour = 21;
+    const cell = grid.querySelector(`.week-grid-cell[data-day="${dayIso}"][data-hour="${hour}"]`);
+    if (!cell) return;
+    const pill = el("button", { type: "button", class: "lesson-pill", title: `Lesson #${lesson.lesson_id}` });
+    pill.append(
+        el("span", { class: "lesson-pill-time" }, `${fmtTime(lesson.start_datetime)}–${fmtTime(lesson.end_datetime)}`),
+        el("span", { class: "lesson-pill-name" }, lesson.course_name),
+    );
+    pill.addEventListener("click", () => openLessonDialog(lesson));
+    cell.append(pill);
+}
+
+async function renderMonth() {
+    const weekGrid = $("calendarWeekGrid");
+    const monthGrid = $("calendarMonthGrid");
+    weekGrid.hidden = true;
+    monthGrid.hidden = false;
+    monthGrid.innerHTML = "";
+
+    const monthStart = startOfMonth(calendarAnchor);
+    const monthEnd = endOfMonth(calendarAnchor);
+    $("calendarRangeLabel").textContent =
+        monthStart.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+    // Header
+    const header = el("div", { class: "month-grid-header" });
+    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((d) => header.append(el("div", {}, d)));
+    monthGrid.append(header);
+
+    // Build 6-row × 7-col body starting from the Monday on/before monthStart.
+    const gridStart = startOfWeek(monthStart);
+    const gridEnd = addDays(gridStart, 41); // 6 weeks
+    const body = el("div", { class: "month-grid-body" });
+    const cellByDay = new Map();
+    const today = isoDate(startOfDay(new Date()));
+    for (let i = 0; i < 42; i++) {
+        const day = addDays(gridStart, i);
+        const key = isoDate(day);
+        const isOther = day.getMonth() !== monthStart.getMonth();
+        const isToday = key === today;
+        const cell = el("div", {
+            class: "month-day"
+                + (isOther ? " is-other-month" : "")
+                + (isToday ? " is-today" : ""),
+        });
+        cell.append(el("span", { class: "month-day-number" }, day.getDate()));
+        cellByDay.set(key, cell);
+        body.append(cell);
+    }
+    monthGrid.append(body);
+
+    let lessons = [];
+    try {
+        lessons = await api(`/lessons?start_date=${isoDate(gridStart)}&end_date=${isoDate(gridEnd)}`);
+    } catch (e) {
+        toast(`Failed to load calendar: ${e.message}`, "error");
+        return;
+    }
+
+    // Group by day
+    const lessonsByDay = new Map();
+    lessons.forEach((l) => {
+        const k = (l.start_datetime || "").slice(0, 10);
+        if (!lessonsByDay.has(k)) lessonsByDay.set(k, []);
+        lessonsByDay.get(k).push(l);
+    });
+
+    lessonsByDay.forEach((items, key) => {
+        const cell = cellByDay.get(key);
+        if (!cell) return;
+        const MAX_SHOWN = 3;
+        items.slice(0, MAX_SHOWN).forEach((l) => {
+            const pill = el("button", { type: "button", class: "lesson-pill", title: `Lesson #${l.lesson_id}` });
+            pill.append(
+                el("span", { class: "lesson-pill-time" }, fmtTime(l.start_datetime)),
+                el("span", { class: "lesson-pill-name" }, l.course_name),
+            );
+            pill.addEventListener("click", () => openLessonDialog(l));
+            cell.append(pill);
+        });
+        if (items.length > MAX_SHOWN) {
+            const more = el("button", { type: "button", class: "month-day-more" },
+                `+${items.length - MAX_SHOWN} more`);
+            more.addEventListener("click", () => {
+                // Switch to week view focused on this date
+                calendarAnchor = new Date(key + "T00:00:00");
+                setCalendarView("week");
+            });
+            cell.append(more);
+        }
+    });
+}
+
+function setCalendarView(view) {
+    calendarView = view;
+    document.querySelectorAll(".view-toggle button[data-view]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.view === view);
+    });
+    renderCalendar();
+}
+
+document.querySelectorAll(".view-toggle button[data-view]").forEach((b) => {
+    b.addEventListener("click", () => setCalendarView(b.dataset.view));
+});
+
 $("calendarPrevBtn").addEventListener("click", () => {
-    calendarStart = addDays(calendarStart, -7);
+    if (calendarView === "week") calendarAnchor = addDays(calendarAnchor, -7);
+    else calendarAnchor = startOfMonth(new Date(calendarAnchor.getFullYear(), calendarAnchor.getMonth() - 1, 1));
     renderCalendar();
 });
 $("calendarNextBtn").addEventListener("click", () => {
-    calendarStart = addDays(calendarStart, 7);
+    if (calendarView === "week") calendarAnchor = addDays(calendarAnchor, 7);
+    else calendarAnchor = startOfMonth(new Date(calendarAnchor.getFullYear(), calendarAnchor.getMonth() + 1, 1));
     renderCalendar();
 });
 $("calendarTodayBtn").addEventListener("click", () => {
-    calendarStart = startOfDay(new Date());
+    calendarAnchor = startOfDay(new Date());
     renderCalendar();
 });
 
@@ -406,19 +542,54 @@ $("markAllAttendedBtn").addEventListener("click", async (e) => {
     if (!currentLesson) return;
     const ids = [...$("lessonParticipants").querySelectorAll('input[name="student"]:checked')]
         .map((c) => parseInt(c.value, 10));
-    if (!ids.length) return toast("Select at least one student", "warn");
+    const pushAbsent = $("pushAbsentCheck").checked;
+    if (!ids.length && !pushAbsent) {
+        return toast("Select at least one student, or enable push-absent", "warn");
+    }
     try {
         const r = await withLoading(e.currentTarget, () => api("/mark_attendance_bulk", {
             method: "POST",
-            body: { lesson_id: currentLesson.lesson_id, student_ids: ids },
+            body: {
+                lesson_id: currentLesson.lesson_id,
+                student_ids: ids,
+                push_absent: pushAbsent,
+            },
         }));
         const errs = r.errors?.length || 0;
-        toast(`Marked ${r.marked_count} attended${errs ? `, ${errs} failed` : ""}`,
-            errs ? "warn" : "success");
+        const pushedN = r.pushed_count || 0;
+        let msg = `Marked ${r.marked_count} attended`;
+        if (pushedN) msg += `, pushed ${pushedN} absent`;
+        if (errs) msg += `, ${errs} failed`;
+        toast(msg, errs ? "warn" : "success");
+
+        // Highlight attended students.
         $("lessonParticipants").querySelectorAll("label").forEach((lab) => {
             const cb = lab.querySelector('input');
             if (cb && cb.checked) lab.classList.add("is-attended");
         });
+
+        // Show the pushed report below the button.
+        const report = $("pushedReport");
+        report.innerHTML = "";
+        if (r.pushed?.length || r.pushed_failed?.length) {
+            report.hidden = false;
+            if (r.pushed?.length) {
+                report.append(el("h4", {}, `Pushed to next class:`));
+                const ul = el("ul");
+                r.pushed.forEach((p) => ul.append(el("li", {},
+                    `${p.student_name} (#${p.student_id}) → lesson #${p.to_lesson_id} on ${fmtDate(p.to_start_datetime)}`)));
+                report.append(ul);
+            }
+            if (r.pushed_failed?.length) {
+                report.append(el("h4", {}, `Could not push:`));
+                const ul = el("ul");
+                r.pushed_failed.forEach((p) => ul.append(el("li", {},
+                    `${p.student_name} (#${p.student_id}): ${p.reason}`)));
+                report.append(ul);
+            }
+        } else {
+            report.hidden = true;
+        }
     } catch (err) {
         toast(err.message, "error");
     }
@@ -464,7 +635,9 @@ const searchStudentsForLesson = debounce(async () => {
 
 $("lessonAddStudentInput").addEventListener("input", searchStudentsForLesson);
 
-// --- Add Class modal ---
+// --- Add Class modal (single / weekly-N-days / daily) ---
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
 async function populateCourseSelect() {
     const sel = $("addClassCourseSelect");
     sel.innerHTML = "";
@@ -478,31 +651,130 @@ async function populateCourseSelect() {
     }
 }
 
+function addWeeklyDayRow(initial = {}) {
+    const wrap = $("addClassDaysList");
+    const row = el("div", { class: "day-row form-row", style: "gap:6px; flex-wrap:nowrap;" });
+    const daySel = el("select", { class: "day-row-day" });
+    WEEKDAYS.forEach((d) => daySel.append(el("option", { value: d }, d)));
+    if (initial.day) daySel.value = initial.day;
+    const startIn = el("input", { type: "time", class: "day-row-start", value: initial.start || "10:00", style: "max-width:110px;" });
+    const endIn = el("input", { type: "time", class: "day-row-end", value: initial.end || "11:00", style: "max-width:110px;" });
+    const rmBtn = el("button", { type: "button", class: "btn-secondary", title: "Remove" }, "×");
+    rmBtn.addEventListener("click", () => { row.remove(); refreshPreview(); });
+    [daySel, startIn, endIn].forEach((i) => i.addEventListener("change", refreshPreview));
+    row.append(daySel, startIn, endIn, rmBtn);
+    wrap.append(row);
+    refreshPreview();
+}
+
+function setAddClassType(type) {
+    const simple = $("addClassSimpleFields");
+    const weekly = $("addClassWeeklyFields");
+    const durRow = $("addClassDurationRow");
+    const unit = $("addClassDurationUnit");
+
+    if (type === "single") {
+        simple.hidden = false; weekly.hidden = true; durRow.hidden = true;
+    } else if (type === "daily") {
+        simple.hidden = false; weekly.hidden = true; durRow.hidden = false;
+        unit.textContent = "days";
+    } else { // weekly
+        simple.hidden = true; weekly.hidden = false; durRow.hidden = false;
+        unit.textContent = "weeks";
+        if (!$("addClassDaysList").children.length) addWeeklyDayRow();
+    }
+    refreshPreview();
+}
+
+function collectWeeklyDays() {
+    return [...document.querySelectorAll("#addClassDaysList .day-row")].map((r) => ({
+        day: r.querySelector(".day-row-day").value,
+        start: r.querySelector(".day-row-start").value,
+        end: r.querySelector(".day-row-end").value,
+    }));
+}
+
+function computeLessonsFromForm() {
+    const courseId = parseInt($("addClassCourseSelect").value, 10);
+    if (!courseId) return { error: "Pick a course" };
+    const type = $("addClassType").value;
+    const out = [];
+
+    if (type === "single") {
+        const d = $("addClassDate").value, s = $("addClassStart").value, e = $("addClassEnd").value;
+        if (!d || !s || !e) return { error: "Fill in date and times" };
+        out.push({ course_id: courseId, start_datetime: `${d} ${s}:00`, end_datetime: `${d} ${e}:00` });
+    } else if (type === "daily") {
+        const d = $("addClassDate").value, s = $("addClassStart").value, e = $("addClassEnd").value;
+        const n = parseInt($("addClassDuration").value, 10);
+        if (!d || !s || !e || !n) return { error: "Fill in date, times and # of days" };
+        const base = new Date(d + "T00:00:00");
+        for (let i = 0; i < n; i++) {
+            const day = isoDate(addDays(base, i));
+            out.push({ course_id: courseId, start_datetime: `${day} ${s}:00`, end_datetime: `${day} ${e}:00` });
+        }
+    } else { // weekly
+        const weekStart = $("addClassWeekStart").value;
+        const weeks = parseInt($("addClassDuration").value, 10);
+        if (!weekStart || !weeks) return { error: "Pick a start week and # of weeks" };
+        const days = collectWeeklyDays();
+        if (!days.length) return { error: "Add at least one day-of-week" };
+        for (const d of days) {
+            if (!d.start || !d.end) return { error: "Every weekly row needs a start and end time" };
+        }
+        const monday = startOfWeek(new Date(weekStart + "T00:00:00"));
+        for (let w = 0; w < weeks; w++) {
+            for (const occ of days) {
+                const idx = WEEKDAYS.indexOf(occ.day);
+                const day = isoDate(addDays(monday, w * 7 + idx));
+                out.push({
+                    course_id: courseId,
+                    start_datetime: `${day} ${occ.start}:00`,
+                    end_datetime: `${day} ${occ.end}:00`,
+                });
+            }
+        }
+    }
+    return { lessons: out };
+}
+
+function refreshPreview() {
+    const r = computeLessonsFromForm();
+    const p = $("addClassPreview");
+    if (r.error) { p.textContent = r.error; return; }
+    p.textContent = `Will create ${r.lessons.length} lesson(s).`;
+}
+
+$("addClassType").addEventListener("change", (e) => setAddClassType(e.currentTarget.value));
+["addClassCourseSelect", "addClassDate", "addClassStart", "addClassEnd", "addClassDuration", "addClassWeekStart"]
+    .forEach((id) => $(id).addEventListener("input", refreshPreview));
+
+$("addClassAddDayBtn").addEventListener("click", () => addWeeklyDayRow());
+
 $("openAddClassBtn").addEventListener("click", async () => {
     await populateCourseSelect();
-    $("addClassDate").value = isoDate(new Date());
+    const todayStr = isoDate(new Date());
+    $("addClassDate").value = todayStr;
+    $("addClassWeekStart").value = todayStr;
     $("addClassStart").value = "09:00";
     $("addClassEnd").value = "10:00";
+    $("addClassDuration").value = 6;
+    $("addClassType").value = "single";
+    $("addClassDaysList").innerHTML = "";
+    setAddClassType("single");
     $("addClassDialog").showModal();
 });
 
 $("addClassForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const courseId = parseInt($("addClassCourseSelect").value, 10);
-    const day = $("addClassDate").value;
-    const start = $("addClassStart").value;
-    const end = $("addClassEnd").value;
-    if (!courseId || !day || !start || !end) return toast("Fill in all fields", "warn");
-
-    const body = {
-        course_id: courseId,
-        start_datetime: `${day} ${start}:00`,
-        end_datetime: `${day} ${end}:00`,
-    };
+    const r = computeLessonsFromForm();
+    if (r.error) return toast(r.error, "warn");
     const btn = e.currentTarget.querySelector("button[type=submit]");
     try {
-        const r = await withLoading(btn, () => api("/add_lesson", { method: "POST", body }));
-        toast(`Created lesson #${r.lesson_id}`, "success");
+        const res = await withLoading(btn, () => api("/add_lessons_bulk", {
+            method: "POST", body: { lessons: r.lessons },
+        }));
+        toast(`Created ${res.lessons.length} lesson(s).`, "success");
         $("addClassDialog").close();
         renderCalendar();
     } catch (err) {
@@ -519,6 +791,22 @@ $("syncCalendarBtn").addEventListener("click", async (e) => {
             body: { months_ahead: 1 },
         }));
         toast(r.message, "success");
+    } catch (err) {
+        toast(err.message, "error");
+    }
+});
+
+// --- Upload DB → Google Sheets ---
+$("uploadSheetsBtn").addEventListener("click", async (e) => {
+    if (!confirm("Overwrite every worksheet in your Google Sheet with the current DB contents?")) return;
+    try {
+        const r = await withLoading(e.currentTarget, () => api("/upload_db_to_sheets", { method: "POST" }));
+        const pushed = (r.pushed || []).map((p) => `${p.table} (${p.rows} rows)`).join(", ");
+        toast(`Uploaded: ${pushed || "nothing"}`, "success");
+        if (r.skipped?.length) {
+            console.warn("Skipped tables:", r.skipped);
+            toast(`${r.skipped.length} table(s) skipped — see console`, "warn");
+        }
     } catch (err) {
         toast(err.message, "error");
     }

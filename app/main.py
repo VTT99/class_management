@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import REPO_ROOT, get_settings
 from app.db import get_conn
-from app.routers import attendance, calendar, courses, registration, students
+from app.routers import attendance, calendar, courses, registration, sheets, students
 
 settings = get_settings()
 logging.basicConfig(
@@ -37,6 +37,7 @@ app.include_router(courses.router)
 app.include_router(registration.router)
 app.include_router(attendance.router)
 app.include_router(calendar.router)
+app.include_router(sheets.router)
 
 if settings.serve_frontend:
     app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "static")), name="static")

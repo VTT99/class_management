@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import require_bearer_token
 from app.db import get_conn
-from app.models import NewLesson
+from datetime import datetime, timedelta
+
+from app.models import NewLesson, NewLessonsBulk
 
 router = APIRouter(prefix="", tags=["courses"], dependencies=[Depends(require_bearer_token)])
 
@@ -74,6 +76,48 @@ def add_lesson(lesson: NewLesson) -> Dict:
         "start_datetime": lesson.start_datetime,
         "end_datetime": lesson.end_datetime,
     }
+
+
+@router.post("/add_lessons_bulk", summary="Create many lessons in one request (any recurrence)", status_code=201)
+def add_lessons_bulk(req: NewLessonsBulk) -> Dict:
+    """Frontend computes the dates for whichever pattern the user picked
+    (single, weekly on N days, daily, etc.) and sends them all here.
+
+    Validates each timestamp format and that every course_id exists.
+    Returns the list of created lessons with their assigned IDs.
+    """
+    # Validate timestamps and unique course set.
+    course_ids = {spec.course_id for spec in req.lessons}
+    for spec in req.lessons:
+        for label, ts in (("start_datetime", spec.start_datetime), ("end_datetime", spec.end_datetime)):
+            try:
+                datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            except ValueError as e:
+                raise HTTPException(422, detail=f"Bad {label!r} for course {spec.course_id}: {e}")
+
+    with get_conn(read_only=False) as con:
+        for cid in course_ids:
+            if not con.execute("SELECT 1 FROM course WHERE course_id = ?", [cid]).fetchone():
+                raise HTTPException(404, detail=f"Course {cid} not found.")
+
+        row = con.execute("SELECT MAX(lesson_id) FROM lesson").fetchone()
+        next_id = (row[0] if row and row[0] is not None else 0) + 1
+
+        created = []
+        for spec in req.lessons:
+            con.execute(
+                "INSERT INTO lesson (lesson_id, start_datetime, end_datetime, course_id) VALUES (?, ?, ?, ?)",
+                [next_id, spec.start_datetime, spec.end_datetime, spec.course_id],
+            )
+            created.append({
+                "lesson_id": next_id,
+                "course_id": spec.course_id,
+                "start_datetime": spec.start_datetime,
+                "end_datetime": spec.end_datetime,
+            })
+            next_id += 1
+
+    return {"message": f"Created {len(created)} lessons.", "lessons": created}
 
 
 @router.get("/search_courses", summary="Search for courses + available start times")

@@ -37,17 +37,23 @@
         <section id="calendarPage" class="page" role="tabpanel" hidden>
             <div class="form-row" style="justify-content: space-between;">
                 <div class="form-row">
-                    <button type="button" id="calendarPrevBtn" class="btn-secondary">◀ Previous week</button>
+                    <div class="view-toggle" role="group" aria-label="Calendar view">
+                        <button type="button" data-view="week" class="active">Week</button>
+                        <button type="button" data-view="month">Month</button>
+                    </div>
+                    <button type="button" id="calendarPrevBtn" class="btn-secondary">◀</button>
                     <span id="calendarRangeLabel"></span>
-                    <button type="button" id="calendarNextBtn" class="btn-secondary">Next week ▶</button>
+                    <button type="button" id="calendarNextBtn" class="btn-secondary">▶</button>
                     <button type="button" id="calendarTodayBtn" class="btn-secondary">Today</button>
                 </div>
                 <div class="form-row">
                     <button type="button" id="openAddClassBtn">+ Add Class</button>
-                    <button type="button" id="syncCalendarBtn" class="btn-secondary" title="Push lessons to Google Calendar">Sync Google Calendar</button>
+                    <button type="button" id="syncCalendarBtn" class="btn-secondary" title="Push lessons to Google Calendar">Sync GCal</button>
+                    <button type="button" id="uploadSheetsBtn" class="btn-secondary" title="Push the local DB back to the Google Sheet">Upload DB → Sheets</button>
                 </div>
             </div>
-            <div id="calendarGrid" class="calendar-grid"></div>
+            <div id="calendarWeekGrid" class="week-grid"></div>
+            <div id="calendarMonthGrid" class="month-grid" hidden></div>
         </section>
     </div>
 
@@ -77,14 +83,44 @@
     <dialog id="addClassDialog" class="modal">
         <form id="addClassForm" method="dialog">
             <h3>Add Class</h3>
+
             <label>Course
-                <select id="addClassCourseSelect" name="course_id" required></select>
+                <select id="addClassCourseSelect" required></select>
             </label>
-            <label>Date<input type="date" id="addClassDate" required></label>
-            <div class="form-row">
-                <label style="flex: 1;">Start time<input type="time" id="addClassStart" required></label>
-                <label style="flex: 1;">End time<input type="time" id="addClassEnd" required></label>
+
+            <label>Type
+                <select id="addClassType" required>
+                    <option value="single">Single class</option>
+                    <option value="weekly">Weekly recurring (one or more days)</option>
+                    <option value="daily">Daily</option>
+                </select>
+            </label>
+
+            <!-- "Single" + "Daily" use these direct fields. -->
+            <div id="addClassSimpleFields">
+                <label>Date<input type="date" id="addClassDate"></label>
+                <div class="form-row">
+                    <label style="flex:1;">Start time<input type="time" id="addClassStart"></label>
+                    <label style="flex:1;">End time<input type="time" id="addClassEnd"></label>
+                </div>
             </div>
+
+            <!-- "Weekly" uses these instead. -->
+            <div id="addClassWeeklyFields" hidden>
+                <label>Start week (any date in it)
+                    <input type="date" id="addClassWeekStart">
+                </label>
+                <div id="addClassDaysList"></div>
+                <button type="button" id="addClassAddDayBtn" class="btn-secondary" style="margin-top: 4px;">+ Add day</button>
+            </div>
+
+            <label id="addClassDurationRow" hidden>
+                Number of <span id="addClassDurationUnit">weeks</span>
+                <input type="number" id="addClassDuration" min="1" max="104" value="6">
+            </label>
+
+            <p id="addClassPreview" class="muted" style="margin: 10px 0 0;"></p>
+
             <div class="modal-actions">
                 <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
                 <button type="submit">Create</button>
@@ -103,7 +139,12 @@
         </div>
         <div class="form-row">
             <button type="button" id="markAllAttendedBtn">Mark selected as attended</button>
+            <label class="inline-check" style="margin: 0;">
+                <input type="checkbox" id="pushAbsentCheck" checked>
+                Push absentees to next class
+            </label>
         </div>
+        <div id="pushedReport" class="result-block" hidden></div>
 
         <hr>
 

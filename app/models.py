@@ -54,7 +54,11 @@ class AttendanceRequest(BaseModel):
 
 class BulkAttendanceRequest(BaseModel):
     lesson_id: int = Field(..., gt=0)
-    student_ids: List[int] = Field(..., min_length=1)
+    student_ids: List[int] = Field(default_factory=list)
+    push_absent: bool = Field(
+        default=False,
+        description="If true, any student registered for this lesson but absent from student_ids is auto-registered to the next available class in the same course.",
+    )
 
 
 class LessonParticipation(BaseModel):
@@ -74,3 +78,13 @@ class NewLesson(BaseModel):
 class SingleRegistration(BaseModel):
     student_id: int = Field(..., gt=0)
     lesson_id: int = Field(..., gt=0)
+
+
+class LessonSpec(BaseModel):
+    course_id: int = Field(..., gt=0)
+    start_datetime: str = Field(..., description="YYYY-MM-DD HH:MM:SS")
+    end_datetime: str = Field(..., description="YYYY-MM-DD HH:MM:SS")
+
+
+class NewLessonsBulk(BaseModel):
+    lessons: List[LessonSpec] = Field(..., min_length=1, max_length=500)

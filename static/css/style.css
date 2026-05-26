@@ -224,7 +224,173 @@ tbody tr:nth-child(even) { background: #fafbfc; }
 .toast.warn { background: var(--warn); }
 @keyframes slidein { from { transform: translateY(8px); opacity: 0; } }
 
-/* ---- Calendar grid ---- */
+/* ---- View toggle ---- */
+.view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.view-toggle button {
+    background: white;
+    color: var(--text);
+    border: none;
+    padding: 7px 14px;
+    border-radius: 0;
+    font-size: 14px;
+}
+.view-toggle button.active {
+    background: var(--primary);
+    color: white;
+}
+
+/* ---- Week time-grid: 8am-10pm rows x 7 day columns ---- */
+.week-grid {
+    display: grid;
+    grid-template-columns: 56px repeat(7, 1fr);
+    grid-auto-rows: 50px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    margin-top: 12px;
+    overflow: hidden;
+    font-size: 12px;
+}
+
+.week-grid-corner {
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: #f8fafc;
+}
+
+.week-grid-day-header {
+    grid-row: 1;
+    padding: 6px 4px;
+    text-align: center;
+    background: #f1f5f9;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.week-grid-day-header.is-today {
+    background: var(--primary);
+    color: white;
+}
+
+.week-grid-time {
+    grid-column: 1;
+    padding: 4px 6px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: #f8fafc;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.week-grid-cell {
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 2px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.week-grid-cell.is-today {
+    background: #eff6ff;
+}
+
+.week-grid-cell .lesson-pill {
+    margin: 0;
+    padding: 3px 6px;
+    font-size: 11px;
+}
+
+/* ---- Month grid ---- */
+.month-grid {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.month-grid-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #f1f5f9;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.month-grid-header > div {
+    padding: 6px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+}
+.month-grid-header > div:last-child { border-right: none; }
+
+.month-grid-body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #fff;
+}
+
+.month-day {
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    min-height: 96px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.month-day.is-other-month {
+    background: #fafbfc;
+    color: var(--muted);
+}
+
+.month-day.is-today .month-day-number {
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    text-align: center;
+}
+
+.month-day-number {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.month-day .lesson-pill {
+    padding: 2px 5px;
+    font-size: 10.5px;
+    margin: 0;
+}
+
+.month-day-more {
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.inline-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--text);
+}
+.inline-check input { margin: 0; }
+
+/* ---- Calendar grid (legacy 7-column list — kept for backward compat) ---- */
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -371,6 +537,10 @@ tbody tr:nth-child(even) { background: #fafbfc; }
     #participantsList, .participant-list { grid-template-columns: 1fr; }
     .calendar-grid { grid-template-columns: 1fr; gap: 8px; }
     .calendar-day { min-height: 60px; }
+    /* On small screens, swap the week time-grid for a stacked list. */
+    .week-grid { grid-template-columns: 56px 1fr; grid-auto-rows: auto; }
+    .week-grid-day-header:not(:first-of-type) { display: none; }
+    .month-day { min-height: 56px; }
     table, thead, tbody, tr, th, td { display: block; }
     thead { display: none; }
     tbody tr { border: 1px solid var(--border); margin-bottom: 8px; padding: 6px; border-radius: 6px; }
