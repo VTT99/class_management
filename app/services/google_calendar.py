@@ -14,6 +14,12 @@ log = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
+# Marker stored on every event we create. Used to filter
+# `events.list` results to only events owned by this app.
+APP_TAG_KEY = "app"
+APP_TAG_VALUE = "class_management"
+APP_TAG_FILTER = f"{APP_TAG_KEY}={APP_TAG_VALUE}"
+
 
 def _build_service() -> Optional[Any]:
     settings = get_settings()
@@ -55,7 +61,12 @@ def build_event_body(group: pd.DataFrame, course_name: str, lesson_id, course_co
         "start": {"dateTime": start_dt.isoformat(), "timeZone": tz},
         "end": {"dateTime": end_dt.isoformat(), "timeZone": tz},
         "colorId": course_colors.get(course_id),
-        "extendedProperties": {"private": {"lesson_id": str(lesson_id)}},
+        "extendedProperties": {
+            "private": {
+                "lesson_id": str(lesson_id),
+                APP_TAG_KEY: APP_TAG_VALUE,
+            },
+        },
     }
 
 
@@ -71,4 +82,10 @@ def is_event_changed(cal_event: dict, db_event_body: dict) -> bool:
     )
 
 
-__all__ = ["_build_service", "build_event_body", "is_event_changed", "HttpError"]
+__all__ = [
+    "_build_service",
+    "build_event_body",
+    "is_event_changed",
+    "HttpError",
+    "APP_TAG_FILTER",
+]

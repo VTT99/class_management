@@ -122,10 +122,19 @@ failures (e.g. unregistered students).
 Diff-based sync: only creates new events, updates changed ones, and deletes
 events that no longer have a matching lesson. Safe to re-run.
 
+Events created by this app carry an `extendedProperties.private.app =
+"class_management"` tag, and the sync only operates on events with that tag,
+so it will not touch events you (or other tools) created manually on the
+same calendar.
+
 ### `POST /generate_calendar_events`
 
-Wipes all events in the window and recreates them. Destructive; the UI asks
-for confirmation.
+Wipes lesson events in the window and recreates them. Destructive; the UI
+asks for confirmation. To support a migration from the previous code, this
+endpoint deletes any event in the window that carries a
+`extendedProperties.private.lesson_id` field, regardless of whether the
+`app` tag is present. Plain calendar events (without a `lesson_id`) are
+left alone.
 
 ### `GET /students/{student_id}/lessons.csv`
 

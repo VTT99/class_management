@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.db import get_conn
 from app.models import CalendarGenerationRequest
 from app.services.google_calendar import (
+    APP_TAG_FILTER,
     HttpError,
     _build_service,
     build_event_body,
@@ -54,18 +55,31 @@ def generate_calendar_events(req: CalendarGenerationRequest) -> dict:
     start_dt = pd.Timestamp.now(tz="UTC").replace(microsecond=0)
     end_dt = start_dt + relativedelta(months=req.months_ahead)
 
+    # Delete any event in the window that looks like one this app created.
+    # We can't use privateExtendedProperty=app=class_management alone, because
+    # events created by the prior version only carry `lesson_id` (no app tag).
+    # So we list everything in the window and filter client-side.
     try:
-        existing = service.events().list(
-            calendarId=calendar_id,
-            timeMin=start_dt.isoformat().replace("+00:00", "Z"),
-            timeMax=end_dt.isoformat().replace("+00:00", "Z"),
-            singleEvents=True,
-        ).execute()
-        for ev in existing.get("items", []):
-            try:
-                service.events().delete(calendarId=calendar_id, eventId=ev["id"]).execute()
-            except HttpError as e:
-                log.warning("Failed to delete event %s: %s", ev["id"], e)
+        page_token = None
+        while True:
+            existing = service.events().list(
+                calendarId=calendar_id,
+                timeMin=start_dt.isoformat().replace("+00:00", "Z"),
+                timeMax=end_dt.isoformat().replace("+00:00", "Z"),
+                singleEvents=True,
+                pageToken=page_token,
+            ).execute()
+            for ev in existing.get("items", []):
+                private = ev.get("extendedProperties", {}).get("private", {})
+                if "lesson_id" not in private:
+                    continue
+                try:
+                    service.events().delete(calendarId=calendar_id, eventId=ev["id"]).execute()
+                except HttpError as e:
+                    log.warning("Failed to delete event %s: %s", ev["id"], e)
+            page_token = existing.get("nextPageToken")
+            if not page_token:
+                break
     except HttpError as e:
         raise HTTPException(status_code=502, detail=f"Calendar list/delete failed: {e}") from e
 
@@ -120,11 +134,13 @@ def sync_calendar_events(req: CalendarGenerationRequest) -> dict:
                 timeMin=start_dt.isoformat(),
                 timeMax=end_dt.isoformat(),
                 singleEvents=True,
-                privateExtendedProperty="lesson_id",
+                privateExtendedProperty=APP_TAG_FILTER,
                 pageToken=page_token,
             ).execute()
             for ev in page.get("items", []):
-                lid = ev["extendedProperties"]["private"]["lesson_id"]
+                lid = ev.get("extendedProperties", {}).get("private", {}).get("lesson_id")
+                if lid is None:
+                    continue
                 cal_events[lid] = ev
             page_token = page.get("nextPageToken")
             if not page_token:
