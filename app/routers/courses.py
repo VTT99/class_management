@@ -143,25 +143,25 @@ def extend_course(req: ExtendCourse) -> Dict:
 def list_lessons(
     start_date: date_cls = Query(..., description="Inclusive start date (YYYY-MM-DD)"),
     end_date: date_cls = Query(..., description="Inclusive end date (YYYY-MM-DD)"),
+    course_id: int = Query(default=None, description="Optional: restrict to one course"),
 ) -> List[Dict]:
     """Returns lessons whose start_datetime falls on or between start_date and end_date,
     ordered by start time. Includes course_name so the UI doesn't have to join twice."""
+    sql = """
+        SELECT l.lesson_id, l.course_id, c.course_name,
+               l.start_datetime, l.end_datetime
+        FROM lesson l
+        JOIN course c ON l.course_id = c.course_id
+        WHERE strptime(l.start_datetime, '%Y-%m-%d %H:%M:%S') >= ?
+          AND strptime(l.start_datetime, '%Y-%m-%d %H:%M:%S') < ?
+    """
+    params: List = [f"{start_date} 00:00:00", f"{end_date} 23:59:59"]
+    if course_id is not None:
+        sql += " AND l.course_id = ?"
+        params.append(course_id)
+    sql += " ORDER BY l.start_datetime"
     with get_conn(read_only=True) as con:
-        rows = con.execute(
-            """
-            SELECT l.lesson_id, l.course_id, c.course_name,
-                   l.start_datetime, l.end_datetime
-            FROM lesson l
-            JOIN course c ON l.course_id = c.course_id
-            WHERE strptime(l.start_datetime, '%Y-%m-%d %H:%M:%S') >= ?
-              AND strptime(l.start_datetime, '%Y-%m-%d %H:%M:%S') < ?
-            ORDER BY l.start_datetime
-            """,
-            [
-                f"{start_date} 00:00:00",
-                f"{end_date} 23:59:59",
-            ],
-        ).fetchall()
+        rows = con.execute(sql, params).fetchall()
     return [
         {
             "lesson_id": r[0],

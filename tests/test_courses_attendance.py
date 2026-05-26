@@ -203,6 +203,67 @@ def test_add_to_next_n_lessons(client):
     assert lesson_ids[2] in skipped_ids
 
 
+def test_preview_and_apply_pushes(client):
+    """Two-step push: preview lists absentees + proposed target; apply
+    registers the chosen target and respects 'leave unassigned' (None)."""
+    import datetime
+
+    base = (datetime.datetime.now() + datetime.timedelta(days=2)).replace(hour=13, minute=0, second=0, microsecond=0)
+    lesson_ids = []
+    for i in range(3):
+        s = base + datetime.timedelta(weeks=i)
+        e = s + datetime.timedelta(hours=1)
+        r = client.post("/add_lesson", json={
+            "course_id": 2,
+            "start_datetime": s.strftime("%Y-%m-%d %H:%M:%S"),
+            "end_datetime": e.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        lesson_ids.append(r.json()["lesson_id"])
+
+    # Alice + Bob registered for the first lesson; neither attends.
+    for sid in (1, 2):
+        client.post("/add_lesson_registration", json={"student_id": sid, "lesson_id": lesson_ids[0]})
+
+    preview = client.post("/preview_absentees", json={"lesson_id": lesson_ids[0]}).json()
+    assert {a["student_id"] for a in preview["absentees"]} == {1, 2}
+    # Proposed target is the next lesson (index 1).
+    for a in preview["absentees"]:
+        assert a["proposed_lesson_id"] == lesson_ids[1]
+
+    # Apply: push Alice to lesson_ids[2], leave Bob unassigned.
+    r = client.post("/apply_pushes", json={"items": [
+        {"student_id": 1, "target_lesson_id": lesson_ids[2]},
+        {"student_id": 2, "target_lesson_id": None},
+    ]})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["applied_count"] == 1
+    assert data["unassigned_count"] == 1
+    assert data["applied"][0]["lesson_id"] == lesson_ids[2]
+
+    # Alice now appears in lesson_ids[2] participants; Bob does not.
+    parts = client.get("/lesson_participants", params={"lesson_id": lesson_ids[2]}).json()
+    sids = {p["student_id"] for p in parts}
+    assert 1 in sids
+    assert 2 not in sids
+
+
+def test_lessons_course_filter(client):
+    import datetime
+    today = datetime.date.today().isoformat()
+    later = (datetime.date.today() + datetime.timedelta(days=120)).isoformat()
+    # Add a course-2 lesson so there's something to filter to.
+    s = (datetime.datetime.now() + datetime.timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    client.post("/add_lesson", json={
+        "course_id": 2,
+        "start_datetime": s.strftime("%Y-%m-%d %H:%M:%S"),
+        "end_datetime": (s + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    r = client.get("/lessons", params={"start_date": today, "end_date": later, "course_id": 2})
+    assert r.status_code == 200
+    assert all(l["course_id"] == 2 for l in r.json())
+
+
 def test_mark_attendance_bulk_push_absent_finds_next_gap(client):
     """If Alice is already registered for the next lesson, push to the
     one after that ('first available gap' algorithm)."""

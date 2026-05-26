@@ -65,6 +65,15 @@ class LessonParticipation(BaseModel):
     lesson_id: int = Field(..., gt=0)
 
 
+class PushItem(BaseModel):
+    student_id: int = Field(..., gt=0)
+    target_lesson_id: Optional[int] = Field(default=None, description="Lesson to push the absentee into; None leaves the credit unassigned.")
+
+
+class ApplyPushes(BaseModel):
+    items: List[PushItem] = Field(default_factory=list)
+
+
 class CalendarGenerationRequest(BaseModel):
     months_ahead: int = Field(..., gt=0, le=24)
 

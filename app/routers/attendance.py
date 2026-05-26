@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_bearer_token
 from app.db import get_conn
-from app.models import AttendanceRequest, BulkAttendanceRequest
+from app.models import ApplyPushes, AttendanceRequest, BulkAttendanceRequest, LessonParticipation
 from app.routers.registration import _insert_registration
 
 router = APIRouter(prefix="", tags=["attendance"], dependencies=[Depends(require_bearer_token)])
@@ -60,6 +60,92 @@ def _credit_next_class(con, student_id: int, course_id: int, after_datetime: str
             _insert_registration(con, student_id, lesson_id, course_id)
             return {"lesson_id": lesson_id, "start_datetime": start_dt}
     return None
+
+
+@router.post("/preview_absentees", summary="List students registered for a lesson but not marked attended, with a proposed next class")
+def preview_absentees(req: LessonParticipation) -> Dict:
+    with get_conn(read_only=True) as con:
+        lesson = con.execute(
+            "SELECT course_id, start_datetime FROM lesson WHERE lesson_id = ?", [req.lesson_id]
+        ).fetchone()
+        if not lesson:
+            raise HTTPException(404, detail=f"Lesson {req.lesson_id} not found.")
+        course_id, start = lesson
+
+        absentees = con.execute(
+            """
+            SELECT r.student_id, s.name
+            FROM course_registration r
+            JOIN student s ON r.student_id = s.student_id
+            WHERE r.lesson_id = ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM attendance a
+                  WHERE a.student_id = r.student_id AND a.lesson_id = r.lesson_id
+              )
+            ORDER BY s.name
+            """,
+            [req.lesson_id],
+        ).fetchall()
+
+        out: List[Dict] = []
+        for sid, name in absentees:
+            proposed = con.execute(
+                """
+                SELECT lesson_id, start_datetime
+                FROM lesson
+                WHERE course_id = ?
+                  AND strptime(start_datetime, '%Y-%m-%d %H:%M:%S') >
+                      strptime(?, '%Y-%m-%d %H:%M:%S')
+                  AND lesson_id NOT IN (
+                      SELECT lesson_id FROM course_registration WHERE student_id = ?
+                  )
+                ORDER BY start_datetime
+                LIMIT 1
+                """,
+                [course_id, start, sid],
+            ).fetchone()
+            out.append({
+                "student_id": sid,
+                "student_name": name,
+                "course_id": course_id,
+                "proposed_lesson_id": proposed[0] if proposed else None,
+                "proposed_start_datetime": proposed[1] if proposed else None,
+            })
+
+    return {"lesson_id": req.lesson_id, "course_id": course_id, "absentees": out}
+
+
+@router.post("/apply_pushes", summary="Register absentees to chosen target lessons (or leave unassigned)")
+def apply_pushes(req: ApplyPushes) -> Dict:
+    applied: List[Dict] = []
+    unassigned: List[int] = []
+    errors: List[Dict] = []
+    with get_conn(read_only=False) as con:
+        for item in req.items:
+            if item.target_lesson_id is None:
+                unassigned.append(item.student_id)
+                continue
+            lesson = con.execute(
+                "SELECT course_id FROM lesson WHERE lesson_id = ?", [item.target_lesson_id]
+            ).fetchone()
+            if not lesson:
+                errors.append({"student_id": item.student_id, "detail": f"Lesson {item.target_lesson_id} not found."})
+                continue
+            course_id = lesson[0]
+            already = con.execute(
+                "SELECT 1 FROM course_registration WHERE student_id = ? AND lesson_id = ?",
+                [item.student_id, item.target_lesson_id],
+            ).fetchone()
+            if not already:
+                _insert_registration(con, item.student_id, item.target_lesson_id, course_id)
+            applied.append({"student_id": item.student_id, "lesson_id": item.target_lesson_id})
+    return {
+        "applied_count": len(applied),
+        "applied": applied,
+        "unassigned_count": len(unassigned),
+        "unassigned": unassigned,
+        "errors": errors,
+    }
 
 
 @router.post("/mark_attendance", summary="Mark attendance for a single student")

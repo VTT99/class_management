@@ -444,6 +444,40 @@ tbody tr:nth-child(even) { background: #fafbfc; }
     cursor: pointer;
 }
 
+.push-row {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: #fff;
+}
+.push-row .push-target {
+    font-size: 13px;
+    margin: 4px 0;
+}
+.push-row .push-search {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+}
+.push-row .push-search .form-row { margin-bottom: 6px; }
+.push-results button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: #f1f5f9;
+    color: var(--text);
+    margin-bottom: 4px;
+    padding: 5px 8px;
+    font-size: 13px;
+}
+.push-results button:hover { background: var(--primary); color: white; }
+.push-warn {
+    color: var(--danger);
+    font-weight: 600;
+    font-size: 13px;
+}
+
 .inline-check {
     display: inline-flex;
     align-items: center;

@@ -609,49 +609,147 @@ $("markAllAttendedBtn").addEventListener("click", async (e) => {
         return toast("Select at least one student, or enable push-absent", "warn");
     }
     try {
+        // Step 1: mark attendance only (no auto-push).
         const r = await withLoading(e.currentTarget, () => api("/mark_attendance_bulk", {
             method: "POST",
-            body: {
-                lesson_id: currentLesson.lesson_id,
-                student_ids: ids,
-                push_absent: pushAbsent,
-            },
+            body: { lesson_id: currentLesson.lesson_id, student_ids: ids, push_absent: false },
         }));
         const errs = r.errors?.length || 0;
-        const pushedN = r.pushed_count || 0;
-        let msg = `Marked ${r.marked_count} attended`;
-        if (pushedN) msg += `, pushed ${pushedN} absent`;
-        if (errs) msg += `, ${errs} failed`;
-        toast(msg, errs ? "warn" : "success");
-
-        // Highlight attended students.
+        toast(`Marked ${r.marked_count} attended${errs ? `, ${errs} failed` : ""}`, errs ? "warn" : "success");
         $("lessonParticipants").querySelectorAll("label").forEach((lab) => {
             const cb = lab.querySelector('input');
             if (cb && cb.checked) lab.classList.add("is-attended");
         });
+        $("pushedReport").hidden = true;
 
-        // Show the pushed report below the button.
-        const report = $("pushedReport");
-        report.innerHTML = "";
-        if (r.pushed?.length || r.pushed_failed?.length) {
-            report.hidden = false;
-            if (r.pushed?.length) {
-                report.append(el("h4", {}, `Pushed to next class:`));
-                const ul = el("ul");
-                r.pushed.forEach((p) => ul.append(el("li", {},
-                    `${p.student_name} (#${p.student_id}) → lesson #${p.to_lesson_id} on ${fmtDate(p.to_start_datetime)}`)));
-                report.append(ul);
-            }
-            if (r.pushed_failed?.length) {
-                report.append(el("h4", {}, `Could not push:`));
-                const ul = el("ul");
-                r.pushed_failed.forEach((p) => ul.append(el("li", {},
-                    `${p.student_name} (#${p.student_id}): ${p.reason}`)));
-                report.append(ul);
-            }
-        } else {
-            report.hidden = true;
+        // Step 2: if push-absent is on, open the confirmation modal.
+        if (pushAbsent) {
+            const opened = await openPushConfirm(currentLesson.lesson_id);
+            if (!opened) toast("No absentees to push.", "info");
         }
+    } catch (err) {
+        toast(err.message, "error");
+    }
+});
+
+// --- Push-confirmation modal ---
+let pushItems = [];
+
+async function openPushConfirm(lessonId) {
+    let preview;
+    try {
+        preview = await api("/preview_absentees", { method: "POST", body: { lesson_id: lessonId } });
+    } catch (e) {
+        toast(e.message, "error");
+        return false;
+    }
+    if (!preview.absentees.length) return false;
+
+    // Ensure we have the course list for the override dropdown.
+    if (!allCourses.length) {
+        try { allCourses = await api("/courses"); } catch (_) { allCourses = []; }
+    }
+
+    pushItems = preview.absentees.map((a) => ({
+        student_id: a.student_id,
+        student_name: a.student_name,
+        course_id: a.course_id,
+        target_lesson_id: a.proposed_lesson_id,
+        target_label: a.proposed_start_datetime,
+    }));
+    renderPushConfirm();
+    $("pushConfirmDialog").showModal();
+    return true;
+}
+
+function renderPushConfirm() {
+    const list = $("pushConfirmList");
+    list.innerHTML = "";
+    let anyUnassigned = false;
+
+    pushItems.forEach((item, idx) => {
+        const row = el("div", { class: "push-row" });
+        row.append(el("strong", {}, `${item.student_name} (#${item.student_id})`));
+
+        const target = el("div", { class: "push-target" });
+        if (item.target_lesson_id) {
+            target.textContent = `→ ${fmtDate(item.target_label)} (lesson #${item.target_lesson_id})`;
+        } else {
+            target.className = "push-target push-warn";
+            target.textContent = "→ ⚠ UNASSIGNED — no class chosen";
+            anyUnassigned = true;
+        }
+        row.append(target);
+
+        const changeBtn = el("button", { type: "button", class: "btn-secondary" }, "Change target");
+        const search = el("div", { class: "push-search", hidden: true });
+        changeBtn.addEventListener("click", () => { search.hidden = !search.hidden; });
+
+        // Course dropdown + date + find
+        const courseSel = el("select", {});
+        (allCourses.length ? allCourses : [{ course_id: item.course_id, course_name: `Course #${item.course_id}` }])
+            .forEach((c) => courseSel.append(el("option", { value: c.course_id }, c.course_name)));
+        courseSel.value = String(item.course_id);
+        const dateInput = el("input", { type: "date", value: isoDate(new Date()) });
+        const findBtn = el("button", { type: "button" }, "Find");
+        const results = el("div", { class: "push-results" });
+
+        findBtn.addEventListener("click", async () => {
+            const cid = parseInt(courseSel.value, 10);
+            const from = dateInput.value || isoDate(new Date());
+            const to = isoDate(addDays(new Date(from + "T00:00:00"), 120));
+            try {
+                const lessons = await api(`/lessons?start_date=${from}&end_date=${to}&course_id=${cid}`);
+                results.innerHTML = "";
+                const unBtn = el("button", { type: "button" }, "↳ Leave unassigned");
+                unBtn.addEventListener("click", () => {
+                    item.target_lesson_id = null; item.target_label = null; renderPushConfirm();
+                });
+                results.append(unBtn);
+                if (!lessons.length) {
+                    results.append(el("p", { class: "empty-state" }, "No classes match."));
+                } else {
+                    lessons.forEach((l) => {
+                        const b = el("button", { type: "button" },
+                            `${fmtDate(l.start_datetime)} · ${l.course_name}`);
+                        b.addEventListener("click", () => {
+                            item.target_lesson_id = l.lesson_id;
+                            item.target_label = l.start_datetime;
+                            renderPushConfirm();
+                        });
+                        results.append(b);
+                    });
+                }
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        });
+
+        const searchRow = el("div", { class: "form-row" }, courseSel, dateInput, findBtn);
+        search.append(searchRow, results);
+        row.append(changeBtn, search);
+        list.append(row);
+    });
+
+    const warn = $("pushUnassignedWarning");
+    if (anyUnassigned) {
+        warn.hidden = false;
+        warn.textContent = "⚠ One or more students have no class chosen and will be left UNASSIGNED (their credit stays unallocated until you add a future class).";
+    } else {
+        warn.hidden = true;
+    }
+}
+
+$("confirmPushesBtn").addEventListener("click", async (e) => {
+    const items = pushItems.map((i) => ({ student_id: i.student_id, target_lesson_id: i.target_lesson_id }));
+    try {
+        const r = await withLoading(e.currentTarget, () => api("/apply_pushes", { method: "POST", body: { items } }));
+        let msg = `Pushed ${r.applied_count}`;
+        if (r.unassigned_count) msg += `, left ${r.unassigned_count} unassigned`;
+        if (r.errors?.length) msg += `, ${r.errors.length} failed`;
+        toast(msg, r.errors?.length ? "warn" : "success");
+        $("pushConfirmDialog").close();
+        await refreshLessonParticipants(currentLesson.lesson_id);
     } catch (err) {
         toast(err.message, "error");
     }

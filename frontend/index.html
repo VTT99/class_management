@@ -245,6 +245,23 @@
         </div>
     </dialog>
 
+    <!-- === Modal: Confirm absentee pushes === -->
+    <dialog id="pushConfirmDialog" class="modal modal-wide">
+        <h3>Confirm absentee pushes</h3>
+        <p class="muted">
+            These students were registered for this class but not marked attended.
+            Each will be re-registered to the chosen class. The default is the next
+            class in the same course they aren't already booked for. Pick another
+            via the course + date search, or leave a student unassigned.
+        </p>
+        <div id="pushConfirmList"></div>
+        <p id="pushUnassignedWarning" class="push-warn" hidden></p>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
+            <button type="button" id="confirmPushesBtn">Confirm pushes</button>
+        </div>
+    </dialog>
+
     <div id="toast-stack" aria-live="polite"></div>
 
     <script src="config.js"></script>
