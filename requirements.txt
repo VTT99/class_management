@@ -9,6 +9,8 @@ python-dateutil>=2.8
 
 # Google APIs
 google-auth>=2.29
+google-auth-httplib2>=0.2
+httplib2>=0.22
 google-api-python-client>=2.120
 gspread>=6.0
 gspread-dataframe>=4.0

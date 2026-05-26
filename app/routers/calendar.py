@@ -1,3 +1,4 @@
+import functools
 import logging
 from typing import Dict
 
@@ -19,6 +20,26 @@ from app.services.google_calendar import (
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="", tags=["calendar"], dependencies=[Depends(require_bearer_token)])
+
+
+def _calendar_guard(label: str):
+    """Turn any unexpected error from a calendar endpoint into a 502 with a
+    readable message, instead of leaking a bare 500. HTTPExceptions we raise
+    deliberately (503 not-configured, etc.) pass through unchanged."""
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except HTTPException:
+                raise
+            except HttpError as e:
+                raise HTTPException(status_code=502, detail=f"{label}: Google API error: {e}") from e
+            except Exception as e:  # network timeout, auth, data, etc.
+                log.exception("%s failed", label)
+                raise HTTPException(status_code=502, detail=f"{label} failed: {type(e).__name__}: {e}") from e
+        return wrapper
+    return deco
 
 
 def _fetch_lessons_in_window(start_dt: pd.Timestamp, end_dt: pd.Timestamp) -> pd.DataFrame:
@@ -50,6 +71,7 @@ def _require_service():
 
 
 @router.post("/generate_calendar_events", summary="Wipe and recreate events in the upcoming N months")
+@_calendar_guard("Calendar regenerate")
 def generate_calendar_events(req: CalendarGenerationRequest) -> dict:
     service = _require_service()
     calendar_id = get_settings().google_calendar_id
@@ -111,6 +133,7 @@ def generate_calendar_events(req: CalendarGenerationRequest) -> dict:
 
 
 @router.post("/sync_calendar_events", summary="Diff-based sync: only create/update/delete what changed")
+@_calendar_guard("Calendar sync")
 def sync_calendar_events(req: CalendarGenerationRequest) -> dict:
     service = _require_service()
     calendar_id = get_settings().google_calendar_id

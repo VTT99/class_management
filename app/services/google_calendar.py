@@ -3,6 +3,8 @@
 import logging
 from typing import Any, Optional
 
+import google_auth_httplib2
+import httplib2
 import pandas as pd
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -13,6 +15,7 @@ from app.config import get_settings
 log = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
+HTTP_TIMEOUT_SECONDS = 20
 
 # Marker stored on every event we create. Used to filter
 # `events.list` results to only events owned by this app.
@@ -34,7 +37,12 @@ def _build_service() -> Optional[Any]:
     creds = service_account.Credentials.from_service_account_file(
         str(settings.google_service_account_path), scopes=SCOPES,
     )
-    return build("calendar", "v3", credentials=creds, cache_discovery=False)
+    # Wrap with an explicit timeout so a blocked/slow network fails in
+    # ~20s with a clear error instead of hanging the worker.
+    authed_http = google_auth_httplib2.AuthorizedHttp(
+        creds, http=httplib2.Http(timeout=HTTP_TIMEOUT_SECONDS),
+    )
+    return build("calendar", "v3", http=authed_http, cache_discovery=False)
 
 
 def build_event_body(group: pd.DataFrame, course_name: str, lesson_id, course_colors: dict) -> dict:
